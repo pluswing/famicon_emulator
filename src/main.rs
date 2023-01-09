@@ -2,33 +2,48 @@ fn main() {
     println!("Hello, world!");
 }
 
-#[derive(Debug)]
-struct Rectangle {
-    width: u32,
-    height: u32,
+pub struct CPU {
+    pub register_a: u8,
+    pub status: u8,
+    pub program_counter: u16,
 }
 
-impl Rectangle {
-    fn can_hold(&self, other: &Rectangle) -> bool {
-        self.width > other.width && self.height > other.height
+impl CPU {
+    pub fn new() -> Self {
+        CPU {
+            register_a: 0,
+            status: 0,
+            program_counter: 0,
+        }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+    pub fn interpret(&mut self, program: Vec<u8>) {
+        self.program_counter = 0;
 
-    #[test]
-    fn larger_can_hold_smaller() {
-        let larger = Rectangle {
-            width: 8,
-            height: 7,
-        };
-        let smaller = Rectangle {
-            width: 5,
-            height: 1,
-        };
+        loop {
+            let opscode = program[self.program_counter as usize];
+            self.program_counter += 1;
 
-        assert!(larger.can_hold(&smaller));
+            match opscode {
+                0xA9 => {
+                    let param = program[self.program_counter as usize];
+                    self.program_counter += 1;
+                    self.register_a = param;
+
+                    if self.register_a == 0 {
+                        self.status = self.status | 0b0000_0010;
+                    } else {
+                        self.status = self.status & 0b1111_1101;
+                    }
+
+                    if self.register_a & 0b1000_0000 != 0 {
+                        self.status = self.status | 0b1000_0000;
+                    } else {
+                        self.status = self.status & 0b0111_1111;
+                    }
+                }
+                _ => todo!(""),
+            }
+        }
     }
 }
