@@ -2,12 +2,28 @@ fn main() {
     println!("Hello, world!");
 }
 
+#[derive(Debug)]
+#[allow(non_camel_case_types)]
+pub enum AddressingMode {
+    Immediate,
+    ZeroPage,
+    ZeroPage_X,
+    ZeroPage_Y,
+    Absolute,
+    Absolute_X,
+    Absolute_Y,
+    Indirect_X,
+    Indirect_Y,
+    NoneAddressing,
+}
+
 pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
+    pub register_y: u8,
     pub status: u8,
     pub program_counter: u16,
-    memory: [u8; 0xFFFF],
+    memory: [u8; 0x10000], // 0xFFFF
 }
 
 impl CPU {
@@ -15,9 +31,64 @@ impl CPU {
         CPU {
             register_a: 0,
             register_x: 0,
+            register_y: 0,
             status: 0,
             program_counter: 0,
-            memory: [0x00; 0xFFFF],
+            memory: [0x00; 0x10000],
+        }
+    }
+
+    fn get_operand_address(&self, mode: &AddressingMode) -> u16 {
+        match mode {
+            AddressingMode::Immediate => self.program_counter,
+
+            AddressingMode::ZeroPage => self.mem_read(self.program_counter) as u16,
+
+            AddressingMode::Absolute => self.mem_read_u16(self.program_counter),
+
+            AddressingMode::ZeroPage_X => {
+                let pos = self.mem_read(self.program_counter);
+                let addr = pos.wrapping_add(self.register_x) as u16;
+                addr
+            }
+            AddressingMode::ZeroPage_Y => {
+                let pos = self.mem_read(self.program_counter);
+                let addr = pos.wrapping_add(self.register_y) as u16;
+                addr
+            }
+
+            AddressingMode::Absolute_X => {
+                let base = self.mem_read_u16(self.program_counter);
+                let addr = base.wrapping_add(self.register_x as u16);
+                addr
+            }
+
+            AddressingMode::Absolute_Y => {
+                let base = self.mem_read_u16(self.program_counter);
+                let addr = base.wrapping_add(self.register_y as u16);
+                addr
+            }
+
+            AddressingMode::Indirect_X => {
+                let base = self.mem_read(self.program_counter);
+                let ptr: u8 = (base as u8).wrapping_add(self.register_x);
+                let lo = self.mem_read(ptr as u16);
+                let hi = self.mem_read(ptr.wrapping_add(1) as u16);
+                (hi as u16) << 8 | (lo as u16)
+            }
+
+            AddressingMode::Indirect_Y => {
+                let base = self.mem_read(self.program_counter);
+                let lo = self.mem_read(base as u16);
+                let hi = self.mem_read((base as u8).wrapping_add(1) as u16);
+                let deref_base = (hi as u16) << 8 | (lo as u16);
+                let deref = deref_base.wrapping_add(self.register_y as u16);
+                deref
+            }
+
+            AddressingMode::NoneAddressing => {
+                panic!("mode {:?} is not supported", mode);
+            }
         }
     }
 
@@ -49,10 +120,10 @@ impl CPU {
     }
 
     pub fn reset(&mut self) {
-        // FIXME テストのために一旦コメントアウト
-        // self.register_a = 0;
-        // self.register_x = 0;
-        // self.status = 0;
+        self.register_a = 0;
+        self.register_x = 0;
+        self.register_y = 0;
+        self.status = 0;
 
         self.program_counter = self.mem_read_u16(0xFFFC);
     }
@@ -148,8 +219,10 @@ mod test {
     #[test]
     fn test_0xaa_tax_move_a_to_x() {
         let mut cpu = CPU::new();
+        cpu.load(vec![0xaa, 0x00]);
+        cpu.reset();
         cpu.register_a = 10;
-        cpu.load_and_run(vec![0xaa, 0x00]);
+        cpu.run();
         assert_eq!(cpu.register_x, 10);
     }
 
@@ -163,8 +236,10 @@ mod test {
     #[test]
     fn test_inx_overflow() {
         let mut cpu = CPU::new();
+        cpu.load(vec![0xe8, 0xe8, 0x00]);
+        cpu.reset();
         cpu.register_x = 0xff;
-        cpu.load_and_run(vec![0xe8, 0xe8, 0x00]);
+        cpu.run();
         assert_eq!(cpu.register_x, 1);
     }
 }
