@@ -40,35 +40,44 @@ impl CPU {
 
     fn get_operand_address(&self, mode: &AddressingMode) -> u16 {
         match mode {
+            // LDA #$44 => a9 44
             AddressingMode::Immediate => self.program_counter,
 
+            // LDA $44 => a5 44
             AddressingMode::ZeroPage => self.mem_read(self.program_counter) as u16,
 
+            // LDA $4400 => ad 00 44
             AddressingMode::Absolute => self.mem_read_u16(self.program_counter),
 
+            // LDA $44,X => b5 44
             AddressingMode::ZeroPage_X => {
                 let pos = self.mem_read(self.program_counter);
                 let addr = pos.wrapping_add(self.register_x) as u16;
                 addr
             }
+
+            // LDX $44,Y => b6 44
             AddressingMode::ZeroPage_Y => {
                 let pos = self.mem_read(self.program_counter);
                 let addr = pos.wrapping_add(self.register_y) as u16;
                 addr
             }
 
+            // LDA $4400,X => bd 00 44
             AddressingMode::Absolute_X => {
                 let base = self.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_x as u16);
                 addr
             }
 
+            // LDA $4400,Y => b9 00 44
             AddressingMode::Absolute_Y => {
                 let base = self.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_y as u16);
                 addr
             }
 
+            // LDA ($44,X) => a1 44
             AddressingMode::Indirect_X => {
                 let base = self.mem_read(self.program_counter);
                 let ptr: u8 = (base as u8).wrapping_add(self.register_x);
@@ -77,6 +86,7 @@ impl CPU {
                 (hi as u16) << 8 | (lo as u16)
             }
 
+            // LDA ($44),Y => b1 44
             AddressingMode::Indirect_Y => {
                 let base = self.mem_read(self.program_counter);
                 let lo = self.mem_read(base as u16);
@@ -160,17 +170,12 @@ impl CPU {
     }
 
     fn tax(&mut self) {
-        println!("TAX");
         self.register_x = self.register_a;
         self.update_zero_and_negative_flags(self.register_x);
     }
 
     fn inx(&mut self) {
-        if self.register_x == 0xFF {
-            self.register_x = 0;
-        } else {
-            self.register_x += 1;
-        }
+        self.register_x = self.register_x.wrapping_add(1);
         self.update_zero_and_negative_flags(self.register_x);
     }
 
