@@ -81,17 +81,14 @@ impl CPU {
             AddressingMode::Indirect_X => {
                 let base = self.mem_read(self.program_counter);
                 let ptr: u8 = (base as u8).wrapping_add(self.register_x);
-                let lo = self.mem_read(ptr as u16);
-                let hi = self.mem_read(ptr.wrapping_add(1) as u16);
-                (hi as u16) << 8 | (lo as u16)
+                let addr = self.mem_read_u16(ptr as u16);
+                addr
             }
 
             // LDA ($44),Y => b1 44
             AddressingMode::Indirect_Y => {
                 let base = self.mem_read(self.program_counter);
-                let lo = self.mem_read(base as u16);
-                let hi = self.mem_read((base as u8).wrapping_add(1) as u16);
-                let deref_base = (hi as u16) << 8 | (lo as u16);
+                let deref_base = self.mem_read_u16(base as u16);
                 let deref = deref_base.wrapping_add(self.register_y as u16);
                 deref
             }
@@ -316,13 +313,90 @@ mod test {
     }
 
     #[test]
-    fn test_lda_from_memory() {
+    fn test_lda_from_memory_zero_page() {
         let mut cpu = CPU::new();
+        cpu.load(vec![0xa5, 0x10, 0x00]);
+        cpu.reset();
         cpu.mem_write(0x10, 0x55);
-
-        // 本来resetが入るので、ダメ？
-        cpu.load_and_run(vec![0xa5, 0x10, 0x00]);
+        cpu.run();
 
         assert_eq!(cpu.register_a, 0x55);
+    }
+
+    #[test]
+    fn test_lda_from_memory_zero_page_X() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xb5, 0x10, 0x00]);
+        cpu.reset();
+        cpu.mem_write(0x11, 0x56);
+        cpu.register_x = 0x01;
+        cpu.run();
+        assert_eq!(cpu.register_a, 0x56);
+    }
+
+    #[test]
+    fn test_lda_from_memory_absolute() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xad, 0x10, 0xaa, 0x00]);
+        cpu.reset();
+        cpu.mem_write(0xAA10, 0x57);
+        cpu.run();
+        assert_eq!(cpu.register_a, 0x57);
+    }
+
+    #[test]
+    fn test_lda_from_memory_absolute_x() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xbd, 0x10, 0xaa, 0x00]);
+        cpu.reset();
+        cpu.mem_write(0xAA15, 0x58);
+        cpu.register_x = 0x05;
+        cpu.run();
+        assert_eq!(cpu.register_a, 0x58);
+    }
+
+    #[test]
+    fn test_lda_from_memory_absolute_y() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xb9, 0x10, 0xaa, 0x00]);
+        cpu.reset();
+        cpu.mem_write(0xAA18, 0x59);
+        cpu.register_y = 0x08;
+        cpu.run();
+        assert_eq!(cpu.register_a, 0x59);
+    }
+
+    #[test]
+    fn test_lda_from_memory_indirect_x() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xa1, 0x10, 0x00]);
+        cpu.reset();
+        cpu.mem_write_u16(0x18, 0xFF05);
+        cpu.mem_write(0xFF05, 0x5A);
+        cpu.register_x = 0x08;
+        cpu.run();
+        assert_eq!(cpu.register_a, 0x5A);
+    }
+
+    #[test]
+    fn test_lda_from_memory_indirect_y() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xb1, 0x10, 0x00]);
+        cpu.reset();
+        cpu.mem_write_u16(0x10, 0xFF06);
+        cpu.mem_write(0xFF09, 0x5B);
+        cpu.register_y = 0x03;
+        cpu.run();
+        assert_eq!(cpu.register_a, 0x5B);
+    }
+
+    #[test]
+    fn test_sta_from_memory() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x85, 0x10, 0x00]);
+        cpu.reset();
+        cpu.register_a = 0xBA;
+        cpu.run();
+        assert_eq!(cpu.mem_read(0x10), 0xBA);
     }
 }
