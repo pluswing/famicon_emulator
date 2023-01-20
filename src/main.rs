@@ -221,6 +221,31 @@ impl CPU {
         }
     }
 
+    fn adc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+
+        let carry = self.status & 0x01;
+        let (rhs, carry_flag1) = value.overflowing_add(carry);
+        let (n, carry_flag2) = self.register_a.overflowing_add(rhs);
+
+        let is_set_overflow = (self.register_a & 0x80) ^ (rhs & 0x80) == 1;
+        let overflow = (rhs & 0x80) != (n & 0x80);
+
+        self.register_a = n;
+
+        self.status = if carry_flag1 && carry_flag2 {
+            self.status | 0x01
+        } else {
+            self.status & 0xFE
+        };
+        self.status = if is_set_overflow && overflow {
+            self.status | 0x40
+        } else {
+            self.status & 0xBF
+        };
+    }
+
     fn lda(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
@@ -324,7 +349,7 @@ mod test {
     }
 
     #[test]
-    fn test_lda_from_memory_zero_page_X() {
+    fn test_lda_from_memory_zero_page_x() {
         let mut cpu = CPU::new();
         cpu.load(vec![0xb5, 0x10, 0x00]);
         cpu.reset();
