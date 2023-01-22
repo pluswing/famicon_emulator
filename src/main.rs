@@ -149,6 +149,10 @@ impl CPU {
             println!("OPS: {:X}", opscode);
 
             match opscode {
+                0x69 => {
+                    self.adc(&AddressingMode::Immediate);
+                    self.program_counter += 1;
+                }
                 /* LDA */
                 0xA9 => {
                     self.lda(&AddressingMode::Immediate);
@@ -229,21 +233,22 @@ impl CPU {
         let (rhs, carry_flag1) = value.overflowing_add(carry);
         let (n, carry_flag2) = self.register_a.overflowing_add(rhs);
 
-        let is_set_overflow = (self.register_a & 0x80) ^ (rhs & 0x80) == 1;
-        let overflow = (rhs & 0x80) != (n & 0x80);
+        let overflow = (self.register_a & 0x80) == (value & 0x80) && (value & 0x80) != (n & 0x80);
 
         self.register_a = n;
 
-        self.status = if carry_flag1 && carry_flag2 {
+        self.status = if carry_flag1 || carry_flag2 {
             self.status | 0x01
         } else {
-            self.status & 0xFE
+            self.status & !0x01
         };
-        self.status = if is_set_overflow && overflow {
+        self.status = if overflow {
             self.status | 0x40
         } else {
-            self.status & 0xBF
+            self.status & !0x40
         };
+
+        self.update_zero_and_negative_flags(self.register_a)
     }
 
     fn lda(&mut self, mode: &AddressingMode) {
@@ -423,5 +428,96 @@ mod test {
         cpu.register_a = 0xBA;
         cpu.run();
         assert_eq!(cpu.mem_read(0x10), 0xBA);
+    }
+
+    #[test]
+    fn test_adc_no_carry() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x69, 0x10, 0x00]);
+        cpu.reset();
+        cpu.register_a = 0x20;
+        cpu.run();
+        assert_eq!(cpu.register_a, 0x30);
+        assert_eq!(cpu.status, 0x00);
+    }
+
+    #[test]
+    fn test_adc_has_carry() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x69, 0x10, 0x00]);
+        cpu.reset();
+        cpu.register_a = 0x20;
+        cpu.status = 0x01;
+        cpu.run();
+        assert_eq!(cpu.register_a, 0x31);
+        assert_eq!(cpu.status, 0x00);
+    }
+
+    #[test]
+    fn test_adc_occur_carry() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x69, 0x01, 0x00]);
+        cpu.reset();
+        cpu.register_a = 0xFF;
+        cpu.run();
+        assert_eq!(cpu.register_a, 0x00);
+        assert_eq!(cpu.status, 0x03);
+    }
+
+    #[test]
+    fn test_adc_occur_overflow_plus() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x69, 0x10, 0x00]);
+        cpu.reset();
+        cpu.register_a = 0x7F;
+        cpu.run();
+        assert_eq!(cpu.register_a, 0x8F);
+        assert_eq!(cpu.status, 0xC0);
+    }
+
+    #[test]
+    fn test_adc_occur_overflow_plus_with_carry() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x69, 0x6F, 0x00]);
+        cpu.reset();
+        cpu.register_a = 0x10;
+        cpu.status = 0x01;
+        cpu.run();
+        assert_eq!(cpu.register_a, 0x80);
+        assert_eq!(cpu.status, 0xC0);
+    }
+
+    #[test]
+    fn test_adc_occur_overflow_minus() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x69, 0x81, 0x00]);
+        cpu.reset();
+        cpu.register_a = 0x81;
+        cpu.run();
+        assert_eq!(cpu.register_a, 0x02);
+        assert_eq!(cpu.status, 0x41);
+    }
+
+    #[test]
+    fn test_adc_occur_overflow_minus_carry() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x69, 0x80, 0x00]);
+        cpu.reset();
+        cpu.register_a = 0x80;
+        cpu.status = 0x01;
+        cpu.run();
+        assert_eq!(cpu.register_a, 0x01);
+        assert_eq!(cpu.status, 0x41);
+    }
+
+    #[test]
+    fn test_adc_occur_no_overflow() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x69, 0x7F, 0x00]);
+        cpu.reset();
+        cpu.register_a = 0x82;
+        cpu.run();
+        assert_eq!(cpu.register_a, 0x01);
+        assert_eq!(cpu.status, 0x01);
     }
 }
