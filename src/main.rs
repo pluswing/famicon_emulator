@@ -26,6 +26,8 @@ const FLAG_BREAK: u8 = 1 << 4;
 const FLAG_OVERFLOW: u8 = 1 << 6;
 const FLAG_NEGATIVE: u8 = 1 << 7;
 
+const SIGN_BIT: u8 = 1 << 7;
+
 pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
@@ -250,8 +252,8 @@ impl CPU {
         let (v1, carry_flag1) = self.register_a.overflowing_sub(value);
         let (n, carry_flag2) = v1.overflowing_sub(1 - carry);
 
-        let overflow =
-            (self.register_a & 0x80) != (value & 0x80) && (self.register_a & 0x80) != (n & 0x80);
+        let overflow = (self.register_a & SIGN_BIT) != (value & SIGN_BIT)
+            && (self.register_a & SIGN_BIT) != (n & SIGN_BIT);
 
         self.register_a = n;
 
@@ -277,7 +279,8 @@ impl CPU {
         let (rhs, carry_flag1) = value.overflowing_add(carry);
         let (n, carry_flag2) = self.register_a.overflowing_add(rhs);
 
-        let overflow = (self.register_a & 0x80) == (value & 0x80) && (value & 0x80) != (n & 0x80);
+        let overflow = (self.register_a & SIGN_BIT) == (value & SIGN_BIT)
+            && (value & SIGN_BIT) != (n & SIGN_BIT);
 
         self.register_a = n;
 
@@ -336,301 +339,263 @@ impl CPU {
 mod test {
     use super::*;
 
+    fn run<F>(program: Vec<u8>, f: F) -> CPU
+    where
+        F: Fn(&mut CPU),
+    {
+        let mut cpu = CPU::new();
+        cpu.load(program);
+        cpu.reset();
+        f(&mut cpu);
+        cpu.run();
+        cpu
+    }
+
+    fn assert_status(cpu: CPU, flags: u8) {
+        assert_eq!(cpu.status, flags)
+    }
+
     #[test]
     fn test_0xa9_lda_immidiate_load_data() {
-        let mut cpu = CPU::new();
-        cpu.load_and_run(vec![0xa9, 0x05, 0x00]);
+        let cpu = run(vec![0xa9, 0x05, 0x00], |_| {});
         assert_eq!(cpu.register_a, 0x05);
-        assert!(cpu.status & 0b0000_0010 == 0b00);
-        assert!(cpu.status & 0b1000_0000 == 0);
+        assert_status(cpu, 0);
     }
 
     #[test]
     fn test_0xa9_lda_zero_flag() {
-        let mut cpu = CPU::new();
-        cpu.load_and_run(vec![0xa9, 0x00, 0x00]);
-        assert!(cpu.status & 0b0000_0010 == 0b10);
+        let cpu = run(vec![0xa9, 0x00, 0x00], |_| {});
+        assert_status(cpu, FLAG_ZERO);
     }
 
     #[test]
     fn test_0xa9_lda_negative_flag() {
-        let mut cpu = CPU::new();
-        cpu.load_and_run(vec![0xa9, 0x80, 0x00]);
-        assert!(cpu.status & 0b1000_0000 != 0);
+        let cpu = run(vec![0xa9, 0x80, 0x00], |_| {});
+        assert_status(cpu, FLAG_NEGATIVE);
     }
 
     #[test]
     fn test_0xaa_tax_move_a_to_x() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0xaa, 0x00]);
-        cpu.reset();
-        cpu.register_a = 10;
-        cpu.run();
+        let cpu = run(vec![0xaa, 0x00], |cpu| {
+            cpu.register_a = 10;
+        });
         assert_eq!(cpu.register_x, 10);
     }
 
     #[test]
     fn test_5_ops_working_together() {
-        let mut cpu = CPU::new();
-        cpu.load_and_run(vec![0xa9, 0xc0, 0xaa, 0xe8, 0x00]);
+        let cpu = run(vec![0xa9, 0xc0, 0xaa, 0xe8, 0x00], |_| {});
         assert_eq!(cpu.register_x, 0xc1);
     }
 
     #[test]
     fn test_inx_overflow() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0xe8, 0xe8, 0x00]);
-        cpu.reset();
-        cpu.register_x = 0xff;
-        cpu.run();
+        let cpu = run(vec![0xe8, 0xe8, 0x00], |cpu| {
+            cpu.register_x = 0xff;
+        });
         assert_eq!(cpu.register_x, 1);
     }
 
     #[test]
     fn test_lda_from_memory_zero_page() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0xa5, 0x10, 0x00]);
-        cpu.reset();
-        cpu.mem_write(0x10, 0x55);
-        cpu.run();
-
+        let cpu = run(vec![0xa5, 0x10, 0x00], |cpu| {
+            cpu.mem_write(0x10, 0x55);
+        });
         assert_eq!(cpu.register_a, 0x55);
     }
 
     #[test]
     fn test_lda_from_memory_zero_page_x() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0xb5, 0x10, 0x00]);
-        cpu.reset();
-        cpu.mem_write(0x11, 0x56);
-        cpu.register_x = 0x01;
-        cpu.run();
+        let cpu = run(vec![0xb5, 0x10, 0x00], |cpu| {
+            cpu.mem_write(0x11, 0x56);
+            cpu.register_x = 0x01;
+        });
         assert_eq!(cpu.register_a, 0x56);
     }
 
     #[test]
     fn test_lda_from_memory_absolute() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0xad, 0x10, 0xaa, 0x00]);
-        cpu.reset();
-        cpu.mem_write(0xAA10, 0x57);
-        cpu.run();
+        let cpu = run(vec![0xad, 0x10, 0xaa, 0x00], |cpu| {
+            cpu.mem_write(0xAA10, 0x57);
+        });
         assert_eq!(cpu.register_a, 0x57);
     }
 
     #[test]
     fn test_lda_from_memory_absolute_x() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0xbd, 0x10, 0xaa, 0x00]);
-        cpu.reset();
-        cpu.mem_write(0xAA15, 0x58);
-        cpu.register_x = 0x05;
-        cpu.run();
+        let cpu = run(vec![0xbd, 0x10, 0xaa, 0x00], |cpu| {
+            cpu.mem_write(0xAA15, 0x58);
+            cpu.register_x = 0x05;
+        });
         assert_eq!(cpu.register_a, 0x58);
     }
 
     #[test]
     fn test_lda_from_memory_absolute_y() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0xb9, 0x10, 0xaa, 0x00]);
-        cpu.reset();
-        cpu.mem_write(0xAA18, 0x59);
-        cpu.register_y = 0x08;
-        cpu.run();
+        let cpu = run(vec![0xb9, 0x10, 0xaa, 0x00], |cpu| {
+            cpu.mem_write(0xAA18, 0x59);
+            cpu.register_y = 0x08;
+        });
         assert_eq!(cpu.register_a, 0x59);
     }
 
     #[test]
     fn test_lda_from_memory_indirect_x() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0xa1, 0x10, 0x00]);
-        cpu.reset();
-        cpu.mem_write_u16(0x18, 0xFF05);
-        cpu.mem_write(0xFF05, 0x5A);
-        cpu.register_x = 0x08;
-        cpu.run();
+        let cpu = run(vec![0xa1, 0x10, 0x00], |cpu| {
+            cpu.mem_write_u16(0x18, 0xFF05);
+            cpu.mem_write(0xFF05, 0x5A);
+            cpu.register_x = 0x08;
+        });
         assert_eq!(cpu.register_a, 0x5A);
     }
 
     #[test]
     fn test_lda_from_memory_indirect_y() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0xb1, 0x10, 0x00]);
-        cpu.reset();
-        cpu.mem_write_u16(0x10, 0xFF06);
-        cpu.mem_write(0xFF09, 0x5B);
-        cpu.register_y = 0x03;
-        cpu.run();
+        let cpu = run(vec![0xb1, 0x10, 0x00], |cpu| {
+            cpu.mem_write_u16(0x10, 0xFF06);
+            cpu.mem_write(0xFF09, 0x5B);
+            cpu.register_y = 0x03;
+        });
         assert_eq!(cpu.register_a, 0x5B);
     }
 
     #[test]
     fn test_sta_from_memory() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0x85, 0x10, 0x00]);
-        cpu.reset();
-        cpu.register_a = 0xBA;
-        cpu.run();
+        let cpu = run(vec![0x85, 0x10, 0x00], |cpu| {
+            cpu.register_a = 0xBA;
+        });
         assert_eq!(cpu.mem_read(0x10), 0xBA);
     }
 
     #[test]
     fn test_adc_no_carry() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0x69, 0x10, 0x00]);
-        cpu.reset();
-        cpu.register_a = 0x20;
-        cpu.run();
+        let cpu = run(vec![0x69, 0x10, 0x00], |cpu| {
+            cpu.register_a = 0x20;
+        });
         assert_eq!(cpu.register_a, 0x30);
-        assert_eq!(cpu.status, 0x00);
+        assert_status(cpu, 0);
     }
 
     #[test]
     fn test_adc_has_carry() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0x69, 0x10, 0x00]);
-        cpu.reset();
-        cpu.register_a = 0x20;
-        cpu.status = 0x01;
-        cpu.run();
+        let cpu = run(vec![0x69, 0x10, 0x00], |cpu| {
+            cpu.register_a = 0x20;
+            cpu.status = FLAG_CARRY;
+        });
         assert_eq!(cpu.register_a, 0x31);
-        assert_eq!(cpu.status, 0x00);
+        assert_status(cpu, 0);
     }
 
     #[test]
     fn test_adc_occur_carry() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0x69, 0x01, 0x00]);
-        cpu.reset();
-        cpu.register_a = 0xFF;
-        cpu.run();
+        let cpu = run(vec![0x69, 0x01, 0x00], |cpu| {
+            cpu.register_a = 0xFF;
+        });
         assert_eq!(cpu.register_a, 0x00);
-        assert_eq!(cpu.status, 0x03);
+        assert_status(cpu, FLAG_CARRY | FLAG_ZERO);
     }
 
     #[test]
     fn test_adc_occur_overflow_plus() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0x69, 0x10, 0x00]);
-        cpu.reset();
-        cpu.register_a = 0x7F;
-        cpu.run();
+        let cpu = run(vec![0x69, 0x10, 0x00], |cpu| {
+            cpu.register_a = 0x7F;
+        });
         assert_eq!(cpu.register_a, 0x8F);
-        assert_eq!(cpu.status, 0xC0);
+        assert_status(cpu, FLAG_NEGATIVE | FLAG_OVERFLOW);
     }
 
     #[test]
     fn test_adc_occur_overflow_plus_with_carry() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0x69, 0x6F, 0x00]);
-        cpu.reset();
-        cpu.register_a = 0x10;
-        cpu.status = 0x01;
-        cpu.run();
+        let cpu = run(vec![0x69, 0x6F, 0x00], |cpu| {
+            cpu.register_a = 0x10;
+            cpu.status = FLAG_CARRY;
+        });
         assert_eq!(cpu.register_a, 0x80);
-        assert_eq!(cpu.status, 0xC0);
+        assert_status(cpu, FLAG_NEGATIVE | FLAG_OVERFLOW);
     }
 
     #[test]
     fn test_adc_occur_overflow_minus() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0x69, 0x81, 0x00]);
-        cpu.reset();
-        cpu.register_a = 0x81;
-        cpu.run();
+        let cpu = run(vec![0x69, 0x81, 0x00], |cpu| {
+            cpu.register_a = 0x81;
+        });
         assert_eq!(cpu.register_a, 0x02);
-        assert_eq!(cpu.status, 0x41);
+        assert_status(cpu, FLAG_OVERFLOW | FLAG_CARRY);
     }
 
     #[test]
     fn test_adc_occur_overflow_minus_with_carry() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0x69, 0x80, 0x00]);
-        cpu.reset();
-        cpu.register_a = 0x80;
-        cpu.status = 0x01;
-        cpu.run();
+        let mut cpu = run(vec![0x69, 0x80, 0x00], |cpu| {
+            cpu.register_a = 0x80;
+            cpu.status = FLAG_CARRY;
+        });
         assert_eq!(cpu.register_a, 0x01);
-        assert_eq!(cpu.status, 0x41);
+        assert_status(cpu, FLAG_OVERFLOW | FLAG_CARRY);
     }
 
     #[test]
     fn test_adc_no_overflow() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0x69, 0x7F, 0x00]);
-        cpu.reset();
-        cpu.register_a = 0x82;
-        cpu.run();
+        let cpu = run(vec![0x69, 0x7F, 0x00], |cpu| {
+            cpu.register_a = 0x82;
+        });
         assert_eq!(cpu.register_a, 0x01);
-        assert_eq!(cpu.status, 0x01);
+        assert_status(cpu, FLAG_CARRY);
     }
 
     #[test]
     fn test_sbc_no_carry() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0xe9, 0x10, 0x00]);
-        cpu.reset();
-        cpu.register_a = 0x20;
-        cpu.run();
+        let cpu = run(vec![0xe9, 0x10, 0x00], |cpu| {
+            cpu.register_a = 0x20;
+        });
         assert_eq!(cpu.register_a, 0x0F);
-        assert_eq!(cpu.status, 0x01);
+        assert_status(cpu, FLAG_CARRY);
     }
 
     #[test]
     fn test_sbc_has_carry() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0xe9, 0x10, 0x00]);
-        cpu.reset();
-        cpu.register_a = 0x20;
-        cpu.status = 0x01;
-        cpu.run();
+        let mut cpu = run(vec![0xe9, 0x10, 0x00], |cpu| {
+            cpu.register_a = 0x20;
+            cpu.status = FLAG_CARRY;
+        });
         assert_eq!(cpu.register_a, 0x10);
-        assert_eq!(cpu.status, 0x01);
+        assert_status(cpu, FLAG_CARRY);
     }
 
     #[test]
     fn test_sbc_occur_carry() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0xe9, 0x02, 0x00]);
-        cpu.reset();
-        cpu.register_a = 0x01;
-        cpu.run();
+        let cpu = run(vec![0xe9, 0x02, 0x00], |cpu| {
+            cpu.register_a = 0x01;
+        });
         assert_eq!(cpu.register_a, 0xFE);
-        assert_eq!(cpu.status, 0x80);
+        assert_status(cpu, FLAG_NEGATIVE);
     }
 
     #[test]
     fn test_sbc_occur_overflow() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0xe9, 0x81, 0x00]);
-        cpu.reset();
-        cpu.register_a = 0x7F;
-        cpu.run();
+        let cpu = run(vec![0xe9, 0x81, 0x00], |cpu| {
+            cpu.register_a = 0x7F;
+        });
         assert_eq!(cpu.register_a, 0xFD);
-        assert_eq!(cpu.status, 0xC0);
+        assert_status(cpu, FLAG_NEGATIVE | FLAG_OVERFLOW);
     }
 
     #[test]
     fn test_sbc_occur_overflow_with_carry() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0xe9, 0x81, 0x00]);
-        cpu.reset();
-        cpu.register_a = 0x7F;
-        cpu.status = 0x01;
-        cpu.run();
+        let cpu = run(vec![0xe9, 0x81, 0x00], |cpu| {
+            cpu.register_a = 0x7F;
+            cpu.status = FLAG_CARRY;
+        });
         assert_eq!(cpu.register_a, 0xFE);
-        assert_eq!(cpu.status, 0xC0);
+        assert_status(cpu, FLAG_NEGATIVE | FLAG_OVERFLOW);
     }
 
     #[test]
     fn test_sbc_no_overflow() {
-        let mut cpu = CPU::new();
-        cpu.load(vec![0xe9, 0x7F, 0x00]);
-        cpu.reset();
-        cpu.register_a = 0x7E;
-        cpu.status = 0x01;
-        cpu.run();
+        let cpu = run(vec![0xe9, 0x7F, 0x00], |cpu| {
+            cpu.register_a = 0x7E;
+            cpu.status = FLAG_CARRY;
+        });
         assert_eq!(cpu.register_a, 0xFF);
-        assert_eq!(cpu.status, 0x80);
+        assert_status(cpu, FLAG_NEGATIVE);
     }
 }
