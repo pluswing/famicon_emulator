@@ -15,6 +15,7 @@ pub enum AddressingMode {
     Absolute_Y,
     Indirect_X,
     Indirect_Y,
+    Relative,
     NoneAddressing,
 }
 
@@ -108,6 +109,12 @@ impl CPU {
                 deref
             }
 
+            // BCC *+4 => 90 04
+            AddressingMode::Relative => {
+                let base = self.mem_read(self.program_counter);
+                return (base as i8) as u16 + self.program_counter;
+            }
+
             AddressingMode::NoneAddressing => {
                 panic!("mode {:?} is not supported", mode);
             }
@@ -164,6 +171,14 @@ impl CPU {
             println!("OPS: {:X}", opscode);
 
             match opscode {
+                0xB0 => {
+                    self.bcs(&AddressingMode::Relative);
+                    self.program_counter += 1;
+                }
+                0x90 => {
+                    self.bcc(&AddressingMode::Relative);
+                    self.program_counter += 1;
+                }
                 0x6A => {
                     self.ror(&AddressingMode::Accumulator);
                 }
@@ -284,6 +299,20 @@ impl CPU {
         }
     }
 
+    fn bcc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        if self.status & FLAG_CARRY == 0 {
+            self.program_counter = addr
+        }
+    }
+
+    fn bcs(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        if self.status & FLAG_CARRY != 0 {
+            self.program_counter = addr
+        }
+    }
+
     fn ror(&mut self, mode: &AddressingMode) {
         let (value, carry) = if mode == &AddressingMode::Accumulator {
             let carry = self.register_a & 0x01;
@@ -339,7 +368,8 @@ impl CPU {
             let addr = self.get_operand_address(mode);
             let value = self.mem_read(addr);
             let carry = value & 0x01;
-            self.mem_write(addr, value / 2);
+            let value = value / 2;
+            self.mem_write(addr, value);
             (value, carry)
         };
 
@@ -841,6 +871,15 @@ mod test {
     }
 
     #[test]
+    fn test_lsr_zero_page_zero_flag() {
+        let cpu = run(vec![0x46, 0x01, 0x00], |cpu| {
+            cpu.mem_write(0x0001, 0x01);
+        });
+        assert_eq!(cpu.mem_read(0x0001), 0x00);
+        assert_status(&cpu, FLAG_ZERO | FLAG_CARRY);
+    }
+
+    #[test]
     fn test_lsr_a_occur_carry() {
         let cpu = run(vec![0x4A, 0x00], |cpu| {
             cpu.register_a = 0x03;
@@ -992,5 +1031,43 @@ mod test {
         });
         assert_eq!(cpu.mem_read(0x0001), 0x80);
         assert_status(&cpu, FLAG_NEGATIVE);
+    }
+
+    // BCC
+    #[test]
+    fn test_bcc() {
+        let cpu = run(vec![0x90, 0x02, 0x00, 0x00, 0xe8, 0x00], |_| {});
+        assert_eq!(cpu.register_x, 0x01);
+        assert_status(&cpu, 0);
+        assert_eq!(cpu.program_counter, 0x8006)
+    }
+
+    #[test]
+    fn test_bcc_with_carry() {
+        let cpu = run(vec![0x90, 0x02, 0x00, 0x00, 0xe8, 0x00], |cpu| {
+            cpu.status = FLAG_CARRY;
+        });
+        assert_eq!(cpu.register_x, 0x00);
+        assert_status(&cpu, FLAG_CARRY);
+        assert_eq!(cpu.program_counter, 0x8003)
+    }
+
+    // BCS
+    #[test]
+    fn test_bcs() {
+        let cpu = run(vec![0xb0, 0x02, 0x00, 0x00, 0xe8, 0x00], |_| {});
+        assert_eq!(cpu.register_x, 0x00);
+        assert_status(&cpu, 0);
+        assert_eq!(cpu.program_counter, 0x8003)
+    }
+
+    #[test]
+    fn test_bcs_with_carry() {
+        let cpu = run(vec![0xb0, 0x02, 0x00, 0x00, 0xe8, 0x00], |cpu| {
+            cpu.status = FLAG_CARRY;
+        });
+        assert_eq!(cpu.register_x, 0x01);
+        assert_status(&cpu, FLAG_CARRY);
+        assert_eq!(cpu.program_counter, 0x8006)
     }
 }
