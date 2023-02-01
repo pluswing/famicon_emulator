@@ -112,7 +112,8 @@ impl CPU {
             // BCC *+4 => 90 04
             AddressingMode::Relative => {
                 let base = self.mem_read(self.program_counter);
-                return (base as i8) as u16 + self.program_counter;
+                let np = (base as i8) as i32 + self.program_counter as i32;
+                return np as u16;
             }
 
             AddressingMode::NoneAddressing => {
@@ -171,6 +172,14 @@ impl CPU {
             println!("OPS: {:X}", opscode);
 
             match opscode {
+                0xD0 => {
+                    self.bne(&AddressingMode::Relative);
+                    self.program_counter += 1;
+                }
+                0xF0 => {
+                    self.beq(&AddressingMode::Relative);
+                    self.program_counter += 1;
+                }
                 0xB0 => {
                     self.bcs(&AddressingMode::Relative);
                     self.program_counter += 1;
@@ -296,6 +305,20 @@ impl CPU {
                 }
                 _ => todo!(""),
             }
+        }
+    }
+
+    fn bne(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        if self.status & FLAG_ZERO == 0 {
+            self.program_counter = addr
+        }
+    }
+
+    fn beq(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        if self.status & FLAG_ZERO != 0 {
+            self.program_counter = addr
         }
     }
 
@@ -851,7 +874,7 @@ mod test {
         assert_status(&cpu, FLAG_CARRY);
     }
 
-    // SLR
+    // LSR
     #[test]
     fn test_lsr_a() {
         let cpu = run(vec![0x4A, 0x00], |cpu| {
@@ -1052,6 +1075,17 @@ mod test {
         assert_eq!(cpu.program_counter, 0x8003)
     }
 
+    #[test]
+    fn test_bcc_negative() {
+        let cpu = run(vec![0x90, 0xfc, 0x00], |cpu| {
+            cpu.mem_write(0x7FFF, 0x00);
+            cpu.mem_write(0x7FFE, 0xe8);
+        });
+        assert_eq!(cpu.register_x, 0x01);
+        assert_status(&cpu, 0);
+        assert_eq!(cpu.program_counter, 0x8000)
+    }
+
     // BCS
     #[test]
     fn test_bcs() {
@@ -1069,5 +1103,55 @@ mod test {
         assert_eq!(cpu.register_x, 0x01);
         assert_status(&cpu, FLAG_CARRY);
         assert_eq!(cpu.program_counter, 0x8006)
+    }
+
+    #[test]
+    fn test_bcs_negative() {
+        let cpu = run(vec![0xb0, 0xfc, 0x00], |cpu| {
+            cpu.mem_write(0x7FFF, 0x00);
+            cpu.mem_write(0x7FFE, 0xe8);
+            cpu.status = FLAG_CARRY;
+        });
+        assert_eq!(cpu.register_x, 0x01);
+        assert_status(&cpu, FLAG_CARRY);
+        assert_eq!(cpu.program_counter, 0x8000)
+    }
+
+    // BEQ
+    #[test]
+    fn test_beq() {
+        let cpu = run(vec![0xF0, 0x02, 0x00, 0x00, 0xe8, 0x00], |cpu| {});
+        assert_eq!(cpu.register_x, 0x00);
+        assert_status(&cpu, 0);
+        assert_eq!(cpu.program_counter, 0x8003)
+    }
+
+    #[test]
+    fn test_beq_with_zero_flag() {
+        let cpu = run(vec![0xF0, 0x02, 0x00, 0x00, 0xe8, 0x00], |cpu| {
+            cpu.status = FLAG_ZERO;
+        });
+        assert_eq!(cpu.register_x, 0x01);
+        assert_status(&cpu, 0); // ZEROはINXで落ちる
+        assert_eq!(cpu.program_counter, 0x8006)
+    }
+
+    // BNE
+    #[test]
+    fn test_bne() {
+        let cpu = run(vec![0xD0, 0x02, 0x00, 0x00, 0xe8, 0x00], |_| {});
+        assert_eq!(cpu.register_x, 0x01);
+        assert_status(&cpu, 0);
+        assert_eq!(cpu.program_counter, 0x8006)
+    }
+
+    #[test]
+    fn test_bne_with_zero_flag() {
+        let cpu = run(vec![0xD0, 0x02, 0x00, 0x00, 0xe8, 0x00], |cpu| {
+            cpu.status = FLAG_ZERO;
+        });
+        assert_eq!(cpu.register_x, 0x00);
+        assert_status(&cpu, FLAG_ZERO);
+        assert_eq!(cpu.program_counter, 0x8003)
     }
 }
