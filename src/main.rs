@@ -172,6 +172,10 @@ impl CPU {
             println!("OPS: {:X}", opscode);
 
             match opscode {
+                0x24 => {
+                    self.bit(&AddressingMode::ZeroPage);
+                    self.program_counter += 1;
+                }
                 0xD0 => {
                     self.bne(&AddressingMode::Relative);
                     self.program_counter += 1;
@@ -313,6 +317,20 @@ impl CPU {
         if self.status & FLAG_ZERO == 0 {
             self.program_counter = addr
         }
+    }
+
+    fn bit(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+
+        let zero = self.register_a & value;
+        if zero == 0 {
+            self.status = self.status | FLAG_ZERO;
+        } else {
+            self.status = self.status & !FLAG_ZERO;
+        }
+        let flags = FLAG_NEGATIVE | FLAG_OVERFLOW;
+        self.status = (self.status & !flags) | (value & flags);
     }
 
     fn beq(&mut self, mode: &AddressingMode) {
@@ -1153,5 +1171,33 @@ mod test {
         assert_eq!(cpu.register_x, 0x00);
         assert_status(&cpu, FLAG_ZERO);
         assert_eq!(cpu.program_counter, 0x8003)
+    }
+
+    // BIT
+    #[test]
+    fn test_bit() {
+        let cpu = run(vec![0x24, 0x00, 0x00], |cpu| {
+            cpu.register_a = 0x00;
+            cpu.mem_write(0x0000, 0x00);
+        });
+        assert_status(&cpu, FLAG_ZERO);
+    }
+
+    #[test]
+    fn test_bit_negative_flag() {
+        let cpu = run(vec![0x24, 0x00, 0x00], |cpu| {
+            cpu.register_a = 0x00;
+            cpu.mem_write(0x0000, 0x80);
+        });
+        assert_status(&cpu, FLAG_NEGATIVE | FLAG_ZERO);
+    }
+
+    #[test]
+    fn test_bit_overflow_flag() {
+        let cpu = run(vec![0x24, 0x00, 0x00], |cpu| {
+            cpu.register_a = 0x40;
+            cpu.mem_write(0x0000, 0x40);
+        });
+        assert_status(&cpu, FLAG_OVERFLOW);
     }
 }

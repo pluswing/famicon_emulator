@@ -14,7 +14,7 @@ https://www.youtube.com/playlist?list=PLp_EUEO9JJP1cMwbqzOHFOI9gPH_zoO0U
 - ASL LSR ROL ROR
 - BCC BCS
 - BEQ BNE
-BIT
+- BIT
 BMI BPL
 BRK
 BVC BVS
