@@ -16,6 +16,7 @@ pub enum AddressingMode {
     Indirect_X,
     Indirect_Y,
     Relative,
+    Implicit,
     NoneAddressing,
 }
 
@@ -53,6 +54,9 @@ impl CPU {
 
     fn get_operand_address(&self, mode: &AddressingMode) -> u16 {
         match mode {
+            AddressingMode::Implicit => {
+                panic!("AddressingMode::Implicit");
+            }
             AddressingMode::Accumulator => {
                 panic!("AddressingMode::Accumulator");
             }
@@ -172,6 +176,14 @@ impl CPU {
             println!("OPS: {:X}", opscode);
 
             match opscode {
+                0x10 => {
+                    self.bpi(&AddressingMode::Relative);
+                    self.program_counter += 1;
+                }
+                0x30 => {
+                    self.bmi(&AddressingMode::Relative);
+                    self.program_counter += 1;
+                }
                 0x24 => {
                     self.bit(&AddressingMode::ZeroPage);
                     self.program_counter += 1;
@@ -274,7 +286,8 @@ impl CPU {
                     self.program_counter += 1;
                 }
 
-                0x00 => return,
+                // FIXME!
+                0x00 => break, // self.brk(&AddressingMode::Implicit),
                 0xAA => self.tax(),
                 0xE8 => self.inx(),
 
@@ -312,11 +325,34 @@ impl CPU {
         }
     }
 
-    fn bne(&mut self, mode: &AddressingMode) {
+    fn brk(&mut self, mode: &AddressingMode) {
+        // プログラム カウンターとプロセッサ ステータスがスタックにプッシュされ、
+        //   ==> ??? FIXME
+
+        // $FFFE/F の IRQ 割り込みベクトルが PC にロードされ、ステータスのブレーク フラグが 1 に設定されます。
+        self.program_counter = self.mem_read_u16(0xFFFE);
+        self.status = self.status | FLAG_BREAK;
+    }
+
+    fn _branch(&mut self, mode: &AddressingMode, flag: u8, zero: bool) {
         let addr = self.get_operand_address(mode);
-        if self.status & FLAG_ZERO == 0 {
-            self.program_counter = addr
+        if zero {
+            if self.status & flag == 0 {
+                self.program_counter = addr
+            }
+        } else {
+            if self.status & flag != 0 {
+                self.program_counter = addr
+            }
         }
+    }
+
+    fn bpi(&mut self, mode: &AddressingMode) {
+        self._branch(mode, FLAG_NEGATIVE, true);
+    }
+
+    fn bmi(&mut self, mode: &AddressingMode) {
+        self._branch(mode, FLAG_NEGATIVE, false);
     }
 
     fn bit(&mut self, mode: &AddressingMode) {
@@ -333,25 +369,20 @@ impl CPU {
         self.status = (self.status & !flags) | (value & flags);
     }
 
+    fn bne(&mut self, mode: &AddressingMode) {
+        self._branch(mode, FLAG_ZERO, true);
+    }
+
     fn beq(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
-        if self.status & FLAG_ZERO != 0 {
-            self.program_counter = addr
-        }
+        self._branch(mode, FLAG_ZERO, false);
     }
 
     fn bcc(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
-        if self.status & FLAG_CARRY == 0 {
-            self.program_counter = addr
-        }
+        self._branch(mode, FLAG_CARRY, true);
     }
 
     fn bcs(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
-        if self.status & FLAG_CARRY != 0 {
-            self.program_counter = addr
-        }
+        self._branch(mode, FLAG_CARRY, false);
     }
 
     fn ror(&mut self, mode: &AddressingMode) {
@@ -1199,5 +1230,43 @@ mod test {
             cpu.mem_write(0x0000, 0x40);
         });
         assert_status(&cpu, FLAG_OVERFLOW);
+    }
+
+    // BMI
+    #[test]
+    fn test_bmi() {
+        let cpu = run(vec![0x30, 0x02, 0x00, 0x00, 0xe8, 0x00], |_| {});
+        assert_eq!(cpu.register_x, 0x00);
+        assert_status(&cpu, 0);
+        assert_eq!(cpu.program_counter, 0x8003)
+    }
+
+    #[test]
+    fn test_bmi_with_negative_flag() {
+        let cpu = run(vec![0x30, 0x02, 0x00, 0x00, 0xe8, 0x00], |cpu| {
+            cpu.status = FLAG_NEGATIVE;
+        });
+        assert_eq!(cpu.register_x, 0x01);
+        assert_status(&cpu, 0); //INXしてるからnegativeが落ちる
+        assert_eq!(cpu.program_counter, 0x8006)
+    }
+
+    // BPI
+    #[test]
+    fn test_bpi() {
+        let cpu = run(vec![0x10, 0x02, 0x00, 0x00, 0xe8, 0x00], |_| {});
+        assert_eq!(cpu.register_x, 0x01);
+        assert_status(&cpu, 0);
+        assert_eq!(cpu.program_counter, 0x8006)
+    }
+
+    #[test]
+    fn test_bpi_with_negative_flag() {
+        let cpu = run(vec![0x10, 0x02, 0x00, 0x00, 0xe8, 0x00], |cpu| {
+            cpu.status = FLAG_NEGATIVE;
+        });
+        assert_eq!(cpu.register_x, 0x00);
+        assert_status(&cpu, FLAG_NEGATIVE);
+        assert_eq!(cpu.program_counter, 0x8003)
     }
 }
