@@ -68,11 +68,23 @@ const main = async () => {
     }).flat().join("\n")
 
     const code = `
-pub static ref CPU_OPS_CODES: Vec<OpCode> = vec![
+pub const CPU_OPS_CODES: Vec<OpCode> = vec![
 ${indent(opcodes, 1)}
 ];
 `
-    fs.writeFileSync(path.join(__dirname, "..", "src", "opscodes.rs"), code)
+
+    const callCode = `pub fn call(cpu: &mut CPU, op: OpsCode) {
+      match (op.name) {
+        ${opsNames.map((name) => `
+        "${name}" => {
+          cpu.${name.toLowerCase()}(&op.addressing_mode);
+          cpu.program_counter += op.bytes - 1
+        }
+        `).join("\n")}
+      }
+    }`
+
+    fs.writeFileSync(path.join(__dirname, "..", "src", "opscodes.rs"), `${code}\n${callCode}`)
     console.log("done.")
 }
 

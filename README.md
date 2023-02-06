@@ -17,7 +17,7 @@ https://www.youtube.com/playlist?list=PLp_EUEO9JJP1cMwbqzOHFOI9gPH_zoO0U
 - BIT
 - BMI BPL
 - BRK ??
-BVC BVS
+- BVC BVS
 CLC SEC
 CLD SED
 CLI SEI

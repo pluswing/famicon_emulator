@@ -1,23 +1,7 @@
+mod opscodes;
+
 fn main() {
     println!("Hello, world!");
-}
-
-#[derive(Debug, PartialEq)]
-#[allow(non_camel_case_types)]
-pub enum AddressingMode {
-    Accumulator,
-    Immediate,
-    ZeroPage,
-    ZeroPage_X,
-    ZeroPage_Y,
-    Absolute,
-    Absolute_X,
-    Absolute_Y,
-    Indirect_X,
-    Indirect_Y,
-    Relative,
-    Implicit,
-    NoneAddressing,
 }
 
 const FLAG_CARRY: u8 = 1 << 0;
@@ -168,6 +152,14 @@ impl CPU {
         self.mem_write_u16(0xFFFC, 0x8000);
     }
 
+    fn call(&mut self, op: OpsCode) {
+        if (op.name == "LDA") {
+            self.lda(&op.addressing_mode);
+            self.program_counter += op.bytes - 1
+        }
+        // ...
+    }
+
     pub fn run(&mut self) {
         loop {
             let opscode = self.mem_read(self.program_counter);
@@ -175,7 +167,22 @@ impl CPU {
 
             println!("OPS: {:X}", opscode);
 
+            for op in opscodes::CPU_OPS_CODES {
+                if (op.code == opscode) {
+                    self.call(&op);
+                    break;
+                }
+            }
+
             match opscode {
+                0x70 => {
+                    self.bvs(&AddressingMode::Relative);
+                    self.program_counter += 1;
+                }
+                0x50 => {
+                    self.bvc(&AddressingMode::Relative);
+                    self.program_counter += 1;
+                }
                 0x10 => {
                     self.bpi(&AddressingMode::Relative);
                     self.program_counter += 1;
@@ -325,6 +332,14 @@ impl CPU {
         }
     }
 
+    fn bvs(&mut self, mode: &AddressingMode) {
+        self._branch(mode, FLAG_OVERFLOW, true);
+    }
+
+    fn bvc(&mut self, mode: &AddressingMode) {
+        self._branch(mode, FLAG_OVERFLOW, false);
+    }
+
     fn brk(&mut self, mode: &AddressingMode) {
         // プログラム カウンターとプロセッサ ステータスがスタックにプッシュされ、
         //   ==> ??? FIXME
@@ -334,25 +349,25 @@ impl CPU {
         self.status = self.status | FLAG_BREAK;
     }
 
-    fn _branch(&mut self, mode: &AddressingMode, flag: u8, zero: bool) {
+    fn _branch(&mut self, mode: &AddressingMode, flag: u8, nonzero: bool) {
         let addr = self.get_operand_address(mode);
-        if zero {
-            if self.status & flag == 0 {
+        if nonzero {
+            if self.status & flag != 0 {
                 self.program_counter = addr
             }
         } else {
-            if self.status & flag != 0 {
+            if self.status & flag == 0 {
                 self.program_counter = addr
             }
         }
     }
 
     fn bpi(&mut self, mode: &AddressingMode) {
-        self._branch(mode, FLAG_NEGATIVE, true);
+        self._branch(mode, FLAG_NEGATIVE, false);
     }
 
     fn bmi(&mut self, mode: &AddressingMode) {
-        self._branch(mode, FLAG_NEGATIVE, false);
+        self._branch(mode, FLAG_NEGATIVE, true);
     }
 
     fn bit(&mut self, mode: &AddressingMode) {
@@ -370,19 +385,19 @@ impl CPU {
     }
 
     fn bne(&mut self, mode: &AddressingMode) {
-        self._branch(mode, FLAG_ZERO, true);
-    }
-
-    fn beq(&mut self, mode: &AddressingMode) {
         self._branch(mode, FLAG_ZERO, false);
     }
 
+    fn beq(&mut self, mode: &AddressingMode) {
+        self._branch(mode, FLAG_ZERO, true);
+    }
+
     fn bcc(&mut self, mode: &AddressingMode) {
-        self._branch(mode, FLAG_CARRY, true);
+        self._branch(mode, FLAG_CARRY, false);
     }
 
     fn bcs(&mut self, mode: &AddressingMode) {
-        self._branch(mode, FLAG_CARRY, false);
+        self._branch(mode, FLAG_CARRY, true);
     }
 
     fn ror(&mut self, mode: &AddressingMode) {
@@ -1268,5 +1283,43 @@ mod test {
         assert_eq!(cpu.register_x, 0x00);
         assert_status(&cpu, FLAG_NEGATIVE);
         assert_eq!(cpu.program_counter, 0x8003)
+    }
+
+    // BVC
+    #[test]
+    fn test_bvc() {
+        let cpu = run(vec![0x50, 0x02, 0x00, 0x00, 0xe8, 0x00], |_| {});
+        assert_eq!(cpu.register_x, 0x01);
+        assert_status(&cpu, 0);
+        assert_eq!(cpu.program_counter, 0x8006)
+    }
+
+    #[test]
+    fn test_bvc_with_overflow_flag() {
+        let cpu = run(vec![0x50, 0x02, 0x00, 0x00, 0xe8, 0x00], |cpu| {
+            cpu.status = FLAG_OVERFLOW;
+        });
+        assert_eq!(cpu.register_x, 0x00);
+        assert_status(&cpu, FLAG_OVERFLOW);
+        assert_eq!(cpu.program_counter, 0x8003)
+    }
+
+    // BVS
+    #[test]
+    fn test_bvs() {
+        let cpu = run(vec![0x70, 0x02, 0x00, 0x00, 0xe8, 0x00], |_| {});
+        assert_eq!(cpu.register_x, 0x00);
+        assert_status(&cpu, 0);
+        assert_eq!(cpu.program_counter, 0x8003);
+    }
+
+    #[test]
+    fn test_bvs_with_overflow_flag() {
+        let cpu = run(vec![0x70, 0x02, 0x00, 0x00, 0xe8, 0x00], |cpu| {
+            cpu.status = FLAG_OVERFLOW;
+        });
+        assert_eq!(cpu.register_x, 0x01);
+        assert_status(&cpu, FLAG_OVERFLOW);
+        assert_eq!(cpu.program_counter, 0x8006)
     }
 }
