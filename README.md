@@ -23,8 +23,8 @@ https://www.youtube.com/playlist?list=PLp_EUEO9JJP1cMwbqzOHFOI9gPH_zoO0U
 - CLI SEI
 - CLV
 - CMP CPX CPY
-DEC DEX DEY
-INC INX INY
+- DEC DEX DEY
+- INC INX INY
 JMP
 JSR RTS
 LDA LDX LDY
