@@ -13,6 +13,7 @@ pub enum AddressingMode {
     Absolute,
     Absolute_X,
     Absolute_Y,
+    Indirect,
     Indirect_X,
     Indirect_Y,
     Relative,
@@ -96,6 +97,12 @@ impl CPU {
                 let addr = base.wrapping_add(self.register_y as u16);
                 addr
             }
+            // JMP
+            AddressingMode::Indirect => {
+                let base = self.mem_read_u16(self.program_counter);
+                let addr = self.mem_read_u16(base);
+                addr
+            }
 
             // LDA ($44,X) => a1 44
             AddressingMode::Indirect_X => {
@@ -176,6 +183,14 @@ impl CPU {
             println!("OPS: {:X}", opscode);
 
             match opscode {
+                0x6C => {
+                    self.jmp(&AddressingMode::Indirect);
+                    // この後program_counterのインクリメントはしない。
+                }
+                0x4C => {
+                    self.jmp(&AddressingMode::Absolute);
+                    // この後program_counterのインクリメントはしない。
+                }
                 0xC8 => {
                     self.iny(&AddressingMode::Implied);
                 }
@@ -383,6 +398,14 @@ impl CPU {
                 _ => todo!(""),
             }
         }
+    }
+
+    fn jmp(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        self.program_counter = addr;
+        // この後program_counterのインクリメントはしない。
+        // TODO
+        // オリジナルの 6502 は、間接ベクトルがページ境界にある場合、ターゲット アドレスを正しくフェッチしません (たとえば、$xxFF で、xx は $00 から $FF までの任意の値です)。この場合、予想どおり $xxFF から LSB を取得しますが、$xx00 から MSB を取得します。これは、65SC02 などの最近のチップで修正されているため、互換性のために、間接ベクトルがページの最後にないことを常に確認してください。
     }
 
     fn iny(&mut self, mode: &AddressingMode) {
@@ -1667,5 +1690,31 @@ mod test {
         });
         assert_eq!(cpu.register_y, 0x00);
         assert_status(&cpu, FLAG_ZERO);
+    }
+
+    // JMP
+    #[test]
+    fn test_jmp() {
+        let cpu = run(vec![0x4c, 0x30, 0x40, 0x00], |cpu| {
+            cpu.mem_write(0x4030, 0xe8);
+            cpu.mem_write(0x4031, 0x00);
+        });
+        assert_eq!(cpu.register_x, 0x01);
+        assert_status(&cpu, 0);
+        assert_eq!(cpu.program_counter, 0x4032);
+    }
+
+    #[test]
+    fn test_jmp_indirect() {
+        let cpu = run(vec![0x6c, 0x30, 0x40, 0x00], |cpu| {
+            cpu.mem_write(0x4030, 0x01);
+            cpu.mem_write(0x4031, 0x02);
+
+            cpu.mem_write(0x0201, 0xe8);
+            cpu.mem_write(0x0202, 0x00);
+        });
+        assert_eq!(cpu.register_x, 0x01);
+        assert_status(&cpu, 0);
+        assert_eq!(cpu.program_counter, 0x0203);
     }
 }
