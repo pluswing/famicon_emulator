@@ -15,7 +15,7 @@ const zip = (a, b, c) => {
 }
 
 const indent = (code, n) => {
-    const space = Array.from({length: n}, (_, k) => k).map(() => "    ").join("")
+    const space = Array.from({length: n}, (_, k) => k).map(() => "  ").join("")
     return code.split("\n").map(l => `${space}${l}`).join("\n")
 }
 
@@ -67,24 +67,35 @@ const main = async () => {
         })
     }).flat().join("\n")
 
+    const header = `
+use crate::cpu::AddressingMode;
+use crate::cpu::OpCode;
+use crate::cpu::CPU;
+`.trim()
+
     const code = `
-pub const CPU_OPS_CODES: Vec<OpCode> = vec![
-${indent(opcodes, 1)}
-];
+lazy_static! {
+  pub static ref CPU_OPS_CODES: Vec<OpCode> = vec![
+${indent(opcodes, 2)}
+  ];
+}
 `
+    const callCode = `
+pub fn call(cpu: &mut CPU, op: &OpCode) {
+  match op.name.as_str() {
+${opsNames.map((name) => `
+    "${name}" => {
+      cpu.${name.toLowerCase()}(&op.addressing_mode);
+      cpu.program_counter += op.bytes - 1
+    }
+`).join("")}
+    _ => {
+        todo!()
+    }
+  }
+}`
 
-    const callCode = `pub fn call(cpu: &mut CPU, op: OpsCode) {
-      match (op.name) {
-        ${opsNames.map((name) => `
-        "${name}" => {
-          cpu.${name.toLowerCase()}(&op.addressing_mode);
-          cpu.program_counter += op.bytes - 1
-        }
-        `).join("\n")}
-      }
-    }`
-
-    fs.writeFileSync(path.join(__dirname, "..", "src", "opscodes.rs"), `${code}\n${callCode}`)
+    fs.writeFileSync(path.join(__dirname, "..", "src", "opscodes.rs"), `${header}\n${code}\n${callCode}`)
     console.log("done.")
 }
 
