@@ -26,8 +26,8 @@ https://www.youtube.com/playlist?list=PLp_EUEO9JJP1cMwbqzOHFOI9gPH_zoO0U
 - DEC DEX DEY
 - INC INX INY
 - JMP
-JSR RTS
-LDA LDX LDY
+- JSR RTS
+- LDA LDX LDY
 NOP
 PHA PLA
 PHP PLP
