@@ -28,8 +28,8 @@ https://www.youtube.com/playlist?list=PLp_EUEO9JJP1cMwbqzOHFOI9gPH_zoO0U
 - JMP
 - JSR RTS
 - LDA LDX LDY
-NOP
-PHA PLA
+- NOP
+- PHA PLA
 PHP PLP
 RTI
 STA STX STY
