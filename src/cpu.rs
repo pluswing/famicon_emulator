@@ -225,13 +225,40 @@ impl CPU {
     pub fn tya(&mut self, mode: &AddressingMode) {}
     pub fn tay(&mut self, mode: &AddressingMode) {}
     pub fn txa(&mut self, mode: &AddressingMode) {}
-    // pub fn tax(&mut self, mode: &AddressingMode) {}
-    pub fn sty(&mut self, mode: &AddressingMode) {}
-    pub fn stx(&mut self, mode: &AddressingMode) {}
-    // pub fn sta(&mut self, mode: &AddressingMode) {}
-    pub fn rti(&mut self, mode: &AddressingMode) {}
-    pub fn plp(&mut self, mode: &AddressingMode) {}
-    pub fn php(&mut self, mode: &AddressingMode) {}
+
+    pub fn tax(&mut self, mode: &AddressingMode) {
+        self.register_x = self.register_a;
+        self.update_zero_and_negative_flags(self.register_x);
+    }
+
+    pub fn sty(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        self.mem_write(addr, self.register_y);
+    }
+
+    pub fn stx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        self.mem_write(addr, self.register_x);
+    }
+
+    pub fn sta(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        self.mem_write(addr, self.register_a);
+    }
+
+    pub fn rti(&mut self, mode: &AddressingMode) {
+        // スタックからプロセッサ フラグをプルし、続いてプログラム カウンタをプルします。
+        self.status = self._pop();
+        self.program_counter = self._pop_u16();
+    }
+
+    pub fn plp(&mut self, mode: &AddressingMode) {
+        self.status = self._pop();
+    }
+
+    pub fn php(&mut self, mode: &AddressingMode) {
+        self._push(self.status);
+    }
 
     pub fn pla(&mut self, mode: &AddressingMode) {
         self.register_a = self._pop();
@@ -636,16 +663,6 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a)
     }
 
-    pub fn tax(&mut self, mode: &AddressingMode) {
-        self.register_x = self.register_a;
-        self.update_zero_and_negative_flags(self.register_x);
-    }
-
-    pub fn sta(&mut self, mode: &AddressingMode) {
-        let addr = self.get_operand_address(mode);
-        self.mem_write(addr, self.register_a);
-    }
-
     fn update_zero_and_negative_flags(&mut self, result: u8) {
         self.status = if result == 0 {
             self.status | FLAG_ZERO
@@ -681,6 +698,7 @@ mod test {
         assert_eq!(cpu.status, flags)
     }
 
+    // LDA
     #[test]
     fn test_0xa9_lda_immidiate_load_data() {
         let cpu = run(vec![0xa9, 0x05, 0x00], |_| {});
@@ -698,20 +716,6 @@ mod test {
     fn test_0xa9_lda_negative_flag() {
         let cpu = run(vec![0xa9, 0x80, 0x00], |_| {});
         assert_status(&cpu, FLAG_NEGATIVE);
-    }
-
-    #[test]
-    fn test_0xaa_tax_move_a_to_x() {
-        let cpu = run(vec![0xaa, 0x00], |cpu| {
-            cpu.register_a = 10;
-        });
-        assert_eq!(cpu.register_x, 10);
-    }
-
-    #[test]
-    fn test_5_ops_working_together() {
-        let cpu = run(vec![0xa9, 0xc0, 0xaa, 0xe8, 0x00], |_| {});
-        assert_eq!(cpu.register_x, 0xc1);
     }
 
     #[test]
@@ -777,6 +781,22 @@ mod test {
         assert_eq!(cpu.register_a, 0x5B);
     }
 
+    // TAX
+    #[test]
+    fn test_0xaa_tax_move_a_to_x() {
+        let cpu = run(vec![0xaa, 0x00], |cpu| {
+            cpu.register_a = 10;
+        });
+        assert_eq!(cpu.register_x, 10);
+    }
+
+    #[test]
+    fn test_5_ops_working_together() {
+        let cpu = run(vec![0xa9, 0xc0, 0xaa, 0xe8, 0x00], |_| {});
+        assert_eq!(cpu.register_x, 0xc1);
+    }
+
+    // STA
     #[test]
     fn test_sta_from_memory() {
         let cpu = run(vec![0x85, 0x10, 0x00], |cpu| {
@@ -1736,5 +1756,60 @@ mod test {
         assert_status(&cpu, FLAG_NEGATIVE);
         assert_eq!(cpu.stack_pointer, 0xFF);
         assert_eq!(cpu.program_counter, 0x8005);
+    }
+
+    // PHP
+    #[test]
+    fn test_php() {
+        let cpu = run(vec![0x08, 0x00], |cpu| {
+            cpu.status = FLAG_NEGATIVE | FLAG_OVERFLOW;
+        });
+        assert_status(&cpu, FLAG_NEGATIVE | FLAG_OVERFLOW);
+        assert_eq!(cpu.stack_pointer, 0xFE);
+        assert_eq!(cpu.mem_read(0x01FF), FLAG_NEGATIVE | FLAG_OVERFLOW);
+    }
+
+    // PLP
+    #[test]
+    fn test_plp() {
+        let cpu = run(vec![0x28, 0x00], |cpu| {
+            cpu.mem_write(0x01FF, FLAG_CARRY | FLAG_ZERO);
+            cpu.stack_pointer = 0xFE;
+        });
+        assert_status(&cpu, FLAG_CARRY | FLAG_ZERO);
+        assert_eq!(cpu.stack_pointer, 0xFF);
+    }
+
+    // PHP & PLP
+    #[test]
+    fn test_plp_and_plp() {
+        let cpu = run(vec![0x08, 0xa9, 0xF0, 0x28, 0x00], |cpu| {
+            cpu.status = FLAG_OVERFLOW | FLAG_CARRY;
+        });
+        assert_eq!(cpu.register_a, 0xF0);
+        assert_status(&cpu, FLAG_OVERFLOW | FLAG_CARRY);
+        assert_eq!(cpu.stack_pointer, 0xFF);
+        assert_eq!(cpu.program_counter, 0x8005);
+    }
+
+    // FIXME RTIのテストは一旦保留
+    // BRKの逆をやるのだが、BRKでpushしてないぽいので。
+
+    // STX
+    #[test]
+    fn test_stx() {
+        let cpu = run(vec![0x86, 0x10, 0x00], |cpu| {
+            cpu.register_x = 0xBA;
+        });
+        assert_eq!(cpu.mem_read(0x10), 0xBA);
+    }
+
+    // STY
+    #[test]
+    fn test_sty() {
+        let cpu = run(vec![0x84, 0x10, 0x00], |cpu| {
+            cpu.register_y = 0xBA;
+        });
+        assert_eq!(cpu.mem_read(0x10), 0xBA);
     }
 }
