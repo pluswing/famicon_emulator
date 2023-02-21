@@ -220,11 +220,30 @@ impl CPU {
             }
         }
     }
-    pub fn txs(&mut self, mode: &AddressingMode) {}
-    pub fn tsx(&mut self, mode: &AddressingMode) {}
-    pub fn tya(&mut self, mode: &AddressingMode) {}
-    pub fn tay(&mut self, mode: &AddressingMode) {}
-    pub fn txa(&mut self, mode: &AddressingMode) {}
+
+    pub fn txs(&mut self, mode: &AddressingMode) {
+        self.stack_pointer = self.register_x;
+    }
+
+    pub fn tsx(&mut self, mode: &AddressingMode) {
+        self.register_x = self.stack_pointer;
+        self.update_zero_and_negative_flags(self.register_x);
+    }
+
+    pub fn tya(&mut self, mode: &AddressingMode) {
+        self.register_a = self.register_y;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
+    pub fn tay(&mut self, mode: &AddressingMode) {
+        self.register_y = self.register_a;
+        self.update_zero_and_negative_flags(self.register_y);
+    }
+
+    pub fn txa(&mut self, mode: &AddressingMode) {
+        self.register_a = self.register_x;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
 
     pub fn tax(&mut self, mode: &AddressingMode) {
         self.register_x = self.register_a;
@@ -451,6 +470,8 @@ impl CPU {
     pub fn brk(&mut self, mode: &AddressingMode) {
         // プログラム カウンターとプロセッサ ステータスがスタックにプッシュされ、
         //   ==> ??? FIXME
+        // self._push_u16(self.program_counter);
+        // self._push(self.stack_pointer);
 
         // $FFFE/F の IRQ 割り込みベクトルが PC にロードされ、ステータスのブレーク フラグが 1 に設定されます。
         self.program_counter = self.mem_read_u16(0xFFFE);
@@ -779,15 +800,6 @@ mod test {
             cpu.register_y = 0x03;
         });
         assert_eq!(cpu.register_a, 0x5B);
-    }
-
-    // TAX
-    #[test]
-    fn test_0xaa_tax_move_a_to_x() {
-        let cpu = run(vec![0xaa, 0x00], |cpu| {
-            cpu.register_a = 10;
-        });
-        assert_eq!(cpu.register_x, 10);
     }
 
     #[test]
@@ -1811,5 +1823,68 @@ mod test {
             cpu.register_y = 0xBA;
         });
         assert_eq!(cpu.mem_read(0x10), 0xBA);
+    }
+
+    // TAX
+    #[test]
+    fn test_0xaa_tax_move_a_to_x() {
+        let cpu = run(vec![0xaa, 0x00], |cpu| {
+            cpu.register_a = 10;
+        });
+        assert_eq!(cpu.register_x, 10);
+    }
+
+    // TXA
+    #[test]
+    fn test_txa() {
+        let cpu = run(vec![0x8a, 0x00], |cpu| {
+            cpu.register_x = 0x10;
+        });
+        assert_eq!(cpu.register_a, 0x10);
+    }
+
+    // TAY
+    #[test]
+    fn test_tay() {
+        let cpu = run(vec![0xa8, 0x00], |cpu| {
+            cpu.register_a = 0x10;
+        });
+        assert_eq!(cpu.register_y, 0x10);
+    }
+
+    // TYA
+    #[test]
+    fn test_tya() {
+        let cpu = run(vec![0x98, 0x00], |cpu| {
+            cpu.register_y = 0x10;
+        });
+        assert_eq!(cpu.register_a, 0x10);
+    }
+
+    // TSX
+    #[test]
+    fn test_tsx() {
+        let cpu = run(vec![0xba, 0x00], |_| {});
+        assert_eq!(cpu.register_x, 0xFF);
+        assert_status(&cpu, FLAG_NEGATIVE);
+    }
+
+    #[test]
+    fn test_tsx_some_value() {
+        let cpu = run(vec![0xba, 0x00], |cpu| {
+            cpu.stack_pointer = 0x75;
+        });
+        assert_eq!(cpu.register_x, 0x75);
+        assert_status(&cpu, 0);
+    }
+
+    // TXS
+    #[test]
+    fn test_txs() {
+        let cpu = run(vec![0x9a, 0x00], |cpu| {
+            cpu.register_x = 0x80;
+        });
+        assert_eq!(cpu.stack_pointer, 0x80);
+        assert_status(&cpu, 0);
     }
 }
