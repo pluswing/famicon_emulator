@@ -50,11 +50,12 @@ const FLAG_ZERO: u8 = 1 << 1;
 const FLAG_INTERRRUPT: u8 = 1 << 2;
 const FLAG_DECIMAL: u8 = 1 << 3;
 const FLAG_BREAK: u8 = 1 << 4;
-// 5 は未使用。
+const FLAG_BREAK2: u8 = 1 << 5; // 5 は未使用。
 const FLAG_OVERFLOW: u8 = 1 << 6;
 const FLAG_NEGATIVE: u8 = 1 << 7;
 
 const SIGN_BIT: u8 = 1 << 7;
+
 pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
@@ -66,7 +67,7 @@ pub struct CPU {
 }
 
 impl CPU {
-    fn new() -> Self {
+    pub fn new() -> Self {
         CPU {
             register_a: 0,
             register_x: 0,
@@ -185,7 +186,7 @@ impl CPU {
         self.run();
     }
 
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.register_a = 0;
         self.register_x = 0;
         self.register_y = 0;
@@ -196,12 +197,19 @@ impl CPU {
         self.program_counter = self.mem_read_u16(0xFFFC);
     }
 
-    fn load(&mut self, program: Vec<u8>) {
+    pub fn load(&mut self, program: Vec<u8>) {
         self.memory[0x8000..(0x8000 + program.len())].copy_from_slice(&program[..]);
         self.mem_write_u16(0xFFFC, 0x8000);
     }
 
-    fn run(&mut self) {
+    pub fn run(&mut self) {
+        self.run_with_callback(|_| {});
+    }
+
+    pub fn run_with_callback<F>(&mut self, mut callback: F)
+    where
+        F: FnMut(&mut CPU),
+    {
         loop {
             let opscode = self.mem_read(self.program_counter);
             self.program_counter += 1;
@@ -214,6 +222,7 @@ impl CPU {
                     if op.name == "BRK" {
                         return;
                     }
+                    callback(self);
                     call(self, &op);
                     break;
                 }
@@ -471,7 +480,7 @@ impl CPU {
         // プログラム カウンターとプロセッサ ステータスがスタックにプッシュされ、
         //   ==> ??? FIXME
         // self._push_u16(self.program_counter);
-        // self._push(self.stack_pointer);
+        // self._push(self.status);
 
         // $FFFE/F の IRQ 割り込みベクトルが PC にロードされ、ステータスのブレーク フラグが 1 に設定されます。
         self.program_counter = self.mem_read_u16(0xFFFE);
