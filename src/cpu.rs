@@ -159,7 +159,7 @@ impl CPU {
         }
     }
 
-    fn mem_read(&self, addr: u16) -> u8 {
+    pub fn mem_read(&self, addr: u16) -> u8 {
         self.memory[addr as usize]
     }
 
@@ -219,9 +219,9 @@ impl CPU {
             for op in CPU_OPS_CODES.iter() {
                 if op.code == opscode {
                     // FIXME FOR TEST
-                    if op.name == "BRK" {
-                        return;
-                    }
+                    // if op.name == "BRK" {
+                    //     return;
+                    // }
                     callback(self);
                     call(self, &op);
                     break;
