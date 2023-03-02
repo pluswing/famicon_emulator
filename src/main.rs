@@ -42,7 +42,12 @@ fn main() {
     ];
 
     let mut cpu = CPU::new();
-    cpu.load(game_code);
+
+    // cpu.load(game_code);
+    // どうもgame_codeの配置場所が0x0600のようなので。
+    cpu.memory[0x0600..(0x0600 + game_code.len())].copy_from_slice(&game_code[..]);
+    cpu.mem_write_u16(0xFFFC, 0x0600);
+
     cpu.reset();
 
     let sdl_context = sdl2::init().unwrap();
