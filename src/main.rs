@@ -4,6 +4,7 @@ extern crate lazy_static;
 mod bus;
 mod cpu;
 mod opscodes;
+mod rom;
 
 use self::cpu::CPU;
 

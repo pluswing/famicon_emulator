@@ -1,9 +1,14 @@
-#[drive(Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
+#[allow(non_camel_case_types)]
 pub enum Mirroring {
     VERTICAL,
     HORIZONTAL,
     FOUR_SCREEN,
 }
+
+const NES_TAG: Vec<u8> = vec!['N', 'E', 'S', '\0'];
+const PRG_ROM_PAGE_SIZE: usize = 16 * 1024; // 16KiB
+const CHR_ROM_PAGE_SIZE: usize = 8 * 1024; // 8KiB
 
 pub struct Rom {
     pub prg_rom: Vec<u8>,

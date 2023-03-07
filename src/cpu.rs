@@ -1,6 +1,8 @@
 use crate::opscodes::{call, CPU_OPS_CODES};
 
 use crate::bus::Bus;
+use crate::rom::Rom;
+
 
 #[derive(Debug, PartialEq)]
 #[allow(non_camel_case_types)]
@@ -88,7 +90,7 @@ impl Mem for CPU {
 }
 
 impl CPU {
-    pub fn new() -> Self {
+    pub fn new(rom: Rom) -> Self {
         CPU {
             register_a: 0,
             register_x: 0,
@@ -97,7 +99,7 @@ impl CPU {
             program_counter: 0,
             stack_pointer: 0xFF,
             // memory: [0x00; 0x10000],
-            bus: Bus::new(),
+            bus: Bus::new(rom),
         }
     }
 
