@@ -1,8 +1,7 @@
 use crate::opscodes::{call, CPU_OPS_CODES};
 
-use crate::bus::Bus;
+use crate::bus::{Bus, Mem};
 use crate::rom::Rom;
-
 
 #[derive(Debug, PartialEq)]
 #[allow(non_camel_case_types)]
@@ -72,21 +71,13 @@ pub struct CPU {
 }
 
 impl Mem for CPU {
-  fn mem_read(&self, addr: u16) -> u8 {
-    self.bus.mem_read(addr)
-  }
+    fn mem_read(&self, addr: u16) -> u8 {
+        self.bus.mem_read(addr)
+    }
 
-  fn mem_write(&mut self, addr: u16, data: u8) {
-    self.bus.mem_write(addr, data)
-  }
-
-  fn mem_read_u16(&self, addr: u16) -> u16 {
-    self.bus.mem_read_u16(addr)
-  }
-
-  fn mem_write(&mut self, addr: u16, data: u16) {
-    self.bus.mem_write_u16(addr, data)
-  }
+    fn mem_write(&mut self, addr: u16, data: u8) {
+        self.bus.mem_write(addr, data)
+    }
 }
 
 impl CPU {
@@ -184,11 +175,11 @@ impl CPU {
     }
 
     pub fn mem_read(&self, addr: u16) -> u8 {
-        self.bus.mem_read([addr as usize]
+        self.bus.mem_read(addr)
     }
 
     pub fn mem_write(&mut self, addr: u16, data: u8) {
-        self.memory[addr as usize] = data;
+        self.bus.mem_write(addr, data);
     }
 
     pub fn mem_read_u16(&self, pos: u16) -> u16 {
@@ -205,7 +196,7 @@ impl CPU {
     }
 
     fn load_and_run(&mut self, program: Vec<u8>) {
-        self.load(program);
+        self.load();
         self.reset();
         self.run();
     }
@@ -221,9 +212,8 @@ impl CPU {
         self.program_counter = self.mem_read_u16(0xFFFC);
     }
 
-    pub fn load(&mut self, program: Vec<u8>) {
-        self.memory[0x8000..(0x8000 + program.len())].copy_from_slice(&program[..]);
-        self.mem_write_u16(0xFFFC, 0x8000);
+    pub fn load(&mut self) {
+        // self.mem_write_u16(0xFFFC, 0x8000);
     }
 
     pub fn run(&mut self) {
@@ -740,8 +730,8 @@ mod test {
     where
         F: Fn(&mut CPU),
     {
-        let mut cpu = CPU::new();
-        cpu.load(program);
+        let mut cpu = CPU::new(Rom::empty());
+        cpu.load();
         cpu.reset();
         f(&mut cpu);
         cpu.run();

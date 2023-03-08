@@ -30,8 +30,13 @@ const RAM_MIRRORS_END: u16 = 0x1FFF;
 const PPU_REGISTERS: u16 = 0x2000;
 const PPU_REGISTERS_MIRRORS_END: u16 = 0x3FFF;
 
-pub impl Mem for Bus {
-    pub fn mem_read(&self, addr: u16) -> u8 {
+pub trait Mem {
+    fn mem_read(&self, addr: u16) -> u8;
+    fn mem_write(&mut self, addr: u16, data: u8);
+}
+
+impl Mem for Bus {
+    fn mem_read(&self, addr: u16) -> u8 {
         match addr {
             0x8000..=0xFFFF => self.read_prg_rom(addr),
             RAM..=RAM_MIRRORS_END => {
@@ -49,7 +54,7 @@ pub impl Mem for Bus {
         }
     }
 
-    pub fn mem_write(&mut self, addr: u16, data: u8) {
+    fn mem_write(&mut self, addr: u16, data: u8) {
         match addr {
             0x8000..=0xFFFF => {
                 panic!("Attempt to write to Cartrige ROM space")
@@ -63,13 +68,8 @@ pub impl Mem for Bus {
                 todo!("PPU is not supported yet")
             }
             _ => {
-                println!("Ignoreing mem write-access at {}", addr);
-                0
+                println!("Ignoreing mem write-access at {}", addr)
             }
         }
     }
-
-    // TODO
-    // mem_read_u16
-    // mem_write_u16
 }

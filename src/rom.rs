@@ -6,7 +6,7 @@ pub enum Mirroring {
     FOUR_SCREEN,
 }
 
-const NES_TAG: Vec<u8> = vec!['N', 'E', 'S', '\0'];
+const NES_TAG: [u8; 4] = [0x4E, 0x45, 0x53, 0x1A]; // NES^Z
 const PRG_ROM_PAGE_SIZE: usize = 16 * 1024; // 16KiB
 const CHR_ROM_PAGE_SIZE: usize = 8 * 1024; // 8KiB
 
@@ -52,5 +52,14 @@ impl Rom {
             mapper: mapper,
             screen_mirroring: screen_mirroring,
         })
+    }
+
+    pub fn empty() -> Self {
+        return Rom {
+            prg_rom: vec![],
+            chr_rom: vec![],
+            mapper: 0,
+            screen_mirroring: Mirroring::VERTICAL,
+        };
     }
 }
