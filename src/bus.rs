@@ -23,12 +23,13 @@ impl Bus {
     }
 }
 
-// const PRG_ROM: u16 = 0x8000;
-// const PRG_ROM_END: u16 = 0xFFFF;
 const RAM: u16 = 0x0000;
 const RAM_MIRRORS_END: u16 = 0x1FFF;
 const PPU_REGISTERS: u16 = 0x2000;
 const PPU_REGISTERS_MIRRORS_END: u16 = 0x3FFF;
+
+const PRG_ROM: u16 = 0x8000;
+const PRG_ROM_END: u16 = 0xFFFF;
 
 pub trait Mem {
     fn mem_read(&self, addr: u16) -> u8;
@@ -38,7 +39,6 @@ pub trait Mem {
 impl Mem for Bus {
     fn mem_read(&self, addr: u16) -> u8 {
         match addr {
-            0x8000..=0xFFFF => self.read_prg_rom(addr),
             RAM..=RAM_MIRRORS_END => {
                 let mirror_down_addr = addr & 0b_0000_0111_1111_1111;
                 self.cpu_vram[mirror_down_addr as usize]
@@ -47,6 +47,7 @@ impl Mem for Bus {
                 let mirror_down_addr = addr & 0b_0010_0000_0000_0111;
                 todo!("PPU is not supported yet")
             }
+            PRG_ROM..=PRG_ROM_END => self.read_prg_rom(addr),
             _ => {
                 println!("Ignoreing mem access at {}", addr);
                 0
@@ -56,9 +57,6 @@ impl Mem for Bus {
 
     fn mem_write(&mut self, addr: u16, data: u8) {
         match addr {
-            0x8000..=0xFFFF => {
-                panic!("Attempt to write to Cartrige ROM space")
-            }
             RAM..=RAM_MIRRORS_END => {
                 let mirror_down_addr = addr & 0b_0000_0111_1111_1111;
                 self.cpu_vram[mirror_down_addr as usize] = data;
@@ -66,6 +64,9 @@ impl Mem for Bus {
             PPU_REGISTERS..=PPU_REGISTERS_MIRRORS_END => {
                 let mirror_down_addr = addr & 0b_0010_0000_0000_0111;
                 todo!("PPU is not supported yet")
+            }
+            PRG_ROM..=PRG_ROM_END => {
+                panic!("Attempt to write to Cartrige ROM space")
             }
             _ => {
                 println!("Ignoreing mem write-access at {}", addr)

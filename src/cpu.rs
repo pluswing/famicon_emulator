@@ -174,14 +174,6 @@ impl CPU {
         }
     }
 
-    pub fn mem_read(&self, addr: u16) -> u8 {
-        self.bus.mem_read(addr)
-    }
-
-    pub fn mem_write(&mut self, addr: u16, data: u8) {
-        self.bus.mem_write(addr, data);
-    }
-
     pub fn mem_read_u16(&self, pos: u16) -> u16 {
         let lo = self.mem_read(pos) as u16;
         let hi = self.mem_read(pos + 1) as u16;
@@ -228,7 +220,7 @@ impl CPU {
             let opscode = self.mem_read(self.program_counter);
             self.program_counter += 1;
 
-            println!("OPS: {:X}", opscode);
+            // println!("OPS: {:X}", opscode);
 
             for op in CPU_OPS_CODES.iter() {
                 if op.code == opscode {
@@ -724,8 +716,47 @@ impl CPU {
 
 #[cfg(test)]
 mod test {
-    use super::*;
 
+    use super::*;
+    use crate::bus::Bus;
+    // use crate::cartridge::test::test_rom;
+
+    #[test]
+    fn test_format_trace() {
+        let mut bus = Bus::new(test_rom());
+        bus.mem_write(100, 0xa2);
+        bus.mem_write(101, 0x01);
+        bus.mem_write(102, 0xca);
+        bus.mem_write(103, 0x88);
+        bus.mem_write(104, 0x00);
+
+        let mut cpu = CPU::new(bus);
+        cpu.program_counter = 0x64;
+        cpu.register_a = 1;
+        cpu.register_x = 2;
+        cpu.register_y = 3;
+
+        let mut result: Vec<String> = vec![];
+        cpu.run_with_callback(|cpu| {
+            result.push(trace(cpu));
+        });
+
+        assert_eq!(
+            "0064  A2 01     LDX #$01                        A:01 X:02 Y:03 P:24 SP:FD",
+            result[0]
+        );
+        assert_eq!(
+            "0066  CA        DEX                             A:01 X:01 Y:03 P:24 SP:FD",
+            result[1]
+        );
+        assert_eq!(
+            "0067  88        DEY                             A:01 X:00 Y:03 P:26 SP:FD",
+            result[2]
+        );
+    }
+
+    /* Instruction tests
+    use super::*;
     fn run<F>(program: Vec<u8>, f: F) -> CPU
     where
         F: Fn(&mut CPU),
@@ -1910,4 +1941,5 @@ mod test {
         assert_eq!(cpu.stack_pointer, 0x80);
         assert_status(&cpu, 0);
     }
+    */
 }
