@@ -1,7 +1,6 @@
 use crate::opscodes::{call, CPU_OPS_CODES};
 
 use crate::bus::{Bus, Mem};
-use crate::rom::Rom;
 
 #[derive(Debug, PartialEq)]
 #[allow(non_camel_case_types)]
@@ -81,7 +80,7 @@ impl Mem for CPU {
 }
 
 impl CPU {
-    pub fn new(rom: Rom) -> Self {
+    pub fn new(bus: Bus) -> Self {
         CPU {
             register_a: 0,
             register_x: 0,
@@ -90,7 +89,7 @@ impl CPU {
             program_counter: 0,
             stack_pointer: 0xFF,
             // memory: [0x00; 0x10000],
-            bus: Bus::new(rom),
+            bus: bus,
         }
     }
 
@@ -225,9 +224,9 @@ impl CPU {
             for op in CPU_OPS_CODES.iter() {
                 if op.code == opscode {
                     // FIXME FOR TEST
-                    // if op.name == "BRK" {
-                    //     return;
-                    // }
+                    if op.name == "BRK" {
+                        return;
+                    }
                     callback(self);
                     call(self, &op);
                     break;
@@ -714,15 +713,20 @@ impl CPU {
     }
 }
 
+fn trace(cpu: &CPU) -> String {
+    String::from("")
+}
+
 #[cfg(test)]
 mod test {
 
     use super::*;
     use crate::bus::Bus;
-    // use crate::cartridge::test::test_rom;
+    use crate::cartridge::test::test_rom;
 
     #[test]
     fn test_format_trace() {
+        println!("AA");
         let mut bus = Bus::new(test_rom());
         bus.mem_write(100, 0xa2);
         bus.mem_write(101, 0x01);
@@ -752,6 +756,35 @@ mod test {
         assert_eq!(
             "0067  88        DEY                             A:01 X:00 Y:03 P:26 SP:FD",
             result[2]
+        );
+    }
+
+    #[test]
+    fn test_format_mem_access() {
+        println!("BB");
+        let mut bus = Bus::new(test_rom());
+        // ORA ($33), Y
+        bus.mem_write(100, 0x11);
+        bus.mem_write(101, 0x33);
+
+        // data
+        bus.mem_write(0x33, 0x00);
+        bus.mem_write(0x34, 0x04);
+
+        // target cell
+        bus.mem_write(0x0400, 0xAA);
+
+        let mut cpu = CPU::new(bus);
+        cpu.program_counter = 0x64;
+        cpu.register_y = 0;
+
+        let mut result: Vec<String> = vec![];
+        cpu.run_with_callback(|cpu| {
+            result.push(trace(cpu));
+        });
+        assert_eq!(
+            "0064  11 33     ORA ($33),Y = 0400 @ 0400 = AA  A:00 X:00 Y:00 P:24 SP:FD",
+            result[0]
         );
     }
 

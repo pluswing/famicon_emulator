@@ -2,11 +2,12 @@
 extern crate lazy_static;
 
 mod bus;
+mod cartridge;
 mod cpu;
 mod opscodes;
 mod rom;
 
-use self::bus::Mem;
+use self::bus::{Bus, Mem};
 use self::cpu::CPU;
 use self::rom::Rom;
 
@@ -26,7 +27,8 @@ fn main() {
     let mut buffer = vec![0; metadata.len() as usize];
     f.read(&mut buffer).expect("buffer overflow");
     let rom = Rom::new(&buffer).expect("load error");
-    let mut cpu = CPU::new(rom);
+    let bus = Bus::new(rom);
+    let mut cpu = CPU::new(bus);
 
     cpu.reset();
 
@@ -50,7 +52,7 @@ fn main() {
     let mut rng = rand::thread_rng();
 
     cpu.run_with_callback(move |cpu| {
-        println!("{}", trace(cpu));
+        // println!("{}", trace(cpu));
         handle_user_input(cpu, &mut event_pump);
         let r: u8 = rng.gen_range(1..16);
         cpu.mem_write(0xFE, r);
