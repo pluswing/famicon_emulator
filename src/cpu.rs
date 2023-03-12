@@ -220,19 +220,28 @@ impl CPU {
             self.program_counter += 1;
 
             // println!("OPS: {:X}", opscode);
-
-            for op in CPU_OPS_CODES.iter() {
-                if op.code == opscode {
+            let op = self.findOps(opscode);
+            match op {
+                Some(op) => {
                     // FIXME FOR TEST
                     if op.name == "BRK" {
                         return;
                     }
                     callback(self);
                     call(self, &op);
-                    break;
                 }
+                _ => {}
             }
         }
+    }
+
+    fn findOps(&mut self, opscode: u8) -> Option<OpCode> {
+        for op in CPU_OPS_CODES.iter() {
+            if op.code == opscode {
+                return Some(*op);
+            }
+        }
+        return None;
     }
 
     pub fn txs(&mut self, mode: &AddressingMode) {
@@ -713,8 +722,48 @@ impl CPU {
     }
 }
 
-fn trace(cpu: &CPU) -> String {
-    String::from("")
+fn trace(cpu: &mut CPU) -> String {
+    // 0064  A2 01     LDX #$01                        A:01 X:02 Y:03 P:24 SP:FD
+    // 0064 => program_counter
+    // A2 01 => binary code
+    // LDX #$01 => asm code
+    // () => memory access
+    // A:01 X:02 Y:03 P:24 SP:FD => register, status, stack_pointer
+
+    let pc = format!("{:<04X}", cpu.program_counter);
+    let op = cpu.mem_read(cpu.program_counter);
+    let ops = cpu.findOps(op).unwrap();
+    let mut args: Vec<u8> = vec![];
+    for n in 1..ops.bytes {
+        let arg = cpu.mem_read(cpu.program_counter + n);
+        args.push(arg);
+    }
+    let asm = disasm(&ops, &args);
+    let memacc = memory_access(ops.addressing_mode, &args);
+    let status = cpu2str(cpu);
+
+    let mut outputs: Vec<String> = vec![];
+    outputs.push(pc);
+    // outputs.push(op, args);
+    outputs.push(asm);
+    outputs.push(memacc);
+    outputs.push(status);
+    outputs.join(" ")
+}
+
+fn disasm(ops: &OpCode, args: &Vec<u8>) -> String {
+    return String::from("");
+}
+
+fn memory_access(mode: AddressingMode, args: &Vec<u8>) -> String {
+    return String::from("");
+}
+
+fn cpu2str(cpu: &CPU) -> String {
+    format!(
+        "A:{:<02X} X:{:<02X} Y:{:<02X} P:{:<02X} SP:{:<02X}",
+        cpu.register_a, cpu.register_x, cpu.register_y, cpu.status, cpu.stack_pointer,
+    )
 }
 
 #[cfg(test)]
