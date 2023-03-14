@@ -2,7 +2,7 @@ use crate::opscodes::{call, CPU_OPS_CODES};
 
 use crate::bus::{Bus, Mem};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 #[allow(non_camel_case_types)]
 pub enum AddressingMode {
     Accumulator,
@@ -21,6 +21,7 @@ pub enum AddressingMode {
     NoneAddressing,
 }
 
+#[derive(Debug, Clone)]
 pub struct OpCode {
     pub code: u8,
     pub name: String,
@@ -137,7 +138,7 @@ impl CPU {
                 let addr = base.wrapping_add(self.register_y as u16);
                 addr
             }
-            // JMP
+            // JMP -> same Absolute
             AddressingMode::Indirect => {
                 let base = self.mem_read_u16(self.program_counter);
                 let addr = self.mem_read_u16(base);
@@ -220,7 +221,7 @@ impl CPU {
             self.program_counter += 1;
 
             // println!("OPS: {:X}", opscode);
-            let op = self.findOps(opscode);
+            let op = self.find_ops(opscode);
             match op {
                 Some(op) => {
                     // FIXME FOR TEST
@@ -235,10 +236,10 @@ impl CPU {
         }
     }
 
-    fn findOps(&mut self, opscode: u8) -> Option<OpCode> {
+    fn find_ops(&mut self, opscode: u8) -> Option<OpCode> {
         for op in CPU_OPS_CODES.iter() {
             if op.code == opscode {
-                return Some(*op);
+                return Some(op.clone());
             }
         }
         return None;
@@ -724,35 +725,114 @@ impl CPU {
 
 fn trace(cpu: &mut CPU) -> String {
     // 0064  A2 01     LDX #$01                        A:01 X:02 Y:03 P:24 SP:FD
-    // 0064 => program_counter
-    // A2 01 => binary code
+    // OK 0064 => program_counter
+    // OK A2 01 => binary code
     // LDX #$01 => asm code
-    // () => memory access
-    // A:01 X:02 Y:03 P:24 SP:FD => register, status, stack_pointer
+    // "0400 @ 0400 = AA" => memory access
+    // OK A:01 X:02 Y:03 P:24 SP:FD => register, status, stack_pointer
 
-    let pc = format!("{:<04X}", cpu.program_counter);
-    let op = cpu.mem_read(cpu.program_counter);
-    let ops = cpu.findOps(op).unwrap();
+    let program_counter = cpu.program_counter - 1;
+    let pc = format!("{:<04X}", program_counter);
+    let op = cpu.mem_read(program_counter);
+    let ops = cpu.find_ops(op).unwrap();
     let mut args: Vec<u8> = vec![];
     for n in 1..ops.bytes {
-        let arg = cpu.mem_read(cpu.program_counter + n);
+        let arg = cpu.mem_read(program_counter + n);
         args.push(arg);
     }
+    let bin = binary(op, &args);
     let asm = disasm(&ops, &args);
     let memacc = memory_access(ops.addressing_mode, &args);
     let status = cpu2str(cpu);
 
     let mut outputs: Vec<String> = vec![];
     outputs.push(pc);
-    // outputs.push(op, args);
+    outputs.push(bin);
     outputs.push(asm);
     outputs.push(memacc);
     outputs.push(status);
     outputs.join(" ")
 }
 
+fn binary(op: u8, args: &Vec<u8>) -> String {
+    let mut list: Vec<String> = vec![];
+    list.push(format!("{:<02X}", op));
+    for v in args {
+        list.push(format!("{:<02X}", v));
+    }
+    list.join(" ")
+}
+
 fn disasm(ops: &OpCode, args: &Vec<u8>) -> String {
-    return String::from("");
+    return format!("{} {}", ops.name, address(&ops.addressing_mode, args));
+}
+
+fn address(mode: &AddressingMode, args: &Vec<u8>) -> String {
+    match mode {
+        AddressingMode::Implied => {
+            return format!("");
+        }
+        AddressingMode::Accumulator => {
+            return format!("");
+        }
+        // LDA #$44 => a9 44
+        AddressingMode::Immediate => {
+            return format!("#${:<02X}", args[0]);
+        }
+
+        // LDA $44 => a5 44
+        AddressingMode::ZeroPage => {
+            return format!("${:<02X}", args[0]);
+        }
+
+        // LDA $4400 => ad 00 44
+        AddressingMode::Absolute => {
+            return format!("${:<02X}{:<02X}", args[1], args[0]);
+        }
+        // LDA $44,X => b5 44
+        AddressingMode::ZeroPage_X => {
+            return format!("${:<02X},X", args[0]);
+        }
+
+        // LDX $44,Y => b6 44
+        AddressingMode::ZeroPage_Y => {
+            return format!("${:<02X},Y", args[0]);
+        }
+
+        // LDA $4400,X => bd 00 44
+        AddressingMode::Absolute_X => {
+            return format!("${:<02X}{:<02X},X", args[1], args[0]);
+        }
+
+        // LDA $4400,Y => b9 00 44
+        AddressingMode::Absolute_Y => {
+            return format!("${:<02X}{:<02X},Y", args[1], args[0]);
+        }
+        // JMP -> same Absolute
+        AddressingMode::Indirect => {
+            return format!("${:<02X}{:<02X}", args[1], args[0]);
+        }
+
+        // LDA ($44,X) => a1 44
+        AddressingMode::Indirect_X => {
+            return format!("(${:<02X},X)", args[0]);
+        }
+
+        // LDA ($44),Y => b1 44
+        AddressingMode::Indirect_Y => {
+            return format!("(${:<02X}),Y", args[0]);
+        }
+
+        // BCC *+4 => 90 04
+        AddressingMode::Relative => {
+            // FIXME
+            return format!("*+{:X}", args[0]);
+        }
+
+        AddressingMode::NoneAddressing => {
+            panic!("mode {:?} is not supported", mode);
+        }
+    }
 }
 
 fn memory_access(mode: AddressingMode, args: &Vec<u8>) -> String {
