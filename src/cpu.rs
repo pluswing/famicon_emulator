@@ -86,9 +86,9 @@ impl CPU {
             register_a: 0,
             register_x: 0,
             register_y: 0,
-            status: 0,
+            status: FLAG_INTERRRUPT | FLAG_BREAK2, // FIXME あってる？
             program_counter: 0,
-            stack_pointer: 0xFF,
+            stack_pointer: 0xFD, // FIXME あってる？
             // memory: [0x00; 0x10000],
             bus: bus,
         }
@@ -727,7 +727,7 @@ fn trace(cpu: &mut CPU) -> String {
     // 0064  A2 01     LDX #$01                        A:01 X:02 Y:03 P:24 SP:FD
     // OK 0064 => program_counter
     // OK A2 01 => binary code
-    // LDX #$01 => asm code
+    // OK LDX #$01 => asm code
     // "0400 @ 0400 = AA" => memory access
     // OK A:01 X:02 Y:03 P:24 SP:FD => register, status, stack_pointer
 
@@ -742,16 +742,10 @@ fn trace(cpu: &mut CPU) -> String {
     }
     let bin = binary(op, &args);
     let asm = disasm(&ops, &args);
-    let memacc = memory_access(ops.addressing_mode, &args);
+    let memacc = memory_access(cpu, ops.addressing_mode, &args);
     let status = cpu2str(cpu);
 
-    let mut outputs: Vec<String> = vec![];
-    outputs.push(pc);
-    outputs.push(bin);
-    outputs.push(asm);
-    outputs.push(memacc);
-    outputs.push(status);
-    outputs.join(" ")
+    format!("{:<6}{:<10}{:<12}{:<20}{}", pc, bin, asm, memacc, status)
 }
 
 fn binary(op: u8, args: &Vec<u8>) -> String {
@@ -764,69 +758,69 @@ fn binary(op: u8, args: &Vec<u8>) -> String {
 }
 
 fn disasm(ops: &OpCode, args: &Vec<u8>) -> String {
-    return format!("{} {}", ops.name, address(&ops.addressing_mode, args));
+    format!("{} {}", ops.name, address(&ops.addressing_mode, args))
 }
 
 fn address(mode: &AddressingMode, args: &Vec<u8>) -> String {
     match mode {
         AddressingMode::Implied => {
-            return format!("");
+            format!("")
         }
         AddressingMode::Accumulator => {
-            return format!("");
+            format!("")
         }
         // LDA #$44 => a9 44
         AddressingMode::Immediate => {
-            return format!("#${:<02X}", args[0]);
+            format!("#${:<02X}", args[0])
         }
 
         // LDA $44 => a5 44
         AddressingMode::ZeroPage => {
-            return format!("${:<02X}", args[0]);
+            format!("${:<02X}", args[0])
         }
 
         // LDA $4400 => ad 00 44
         AddressingMode::Absolute => {
-            return format!("${:<02X}{:<02X}", args[1], args[0]);
+            format!("${:<02X}{:<02X}", args[1], args[0])
         }
         // LDA $44,X => b5 44
         AddressingMode::ZeroPage_X => {
-            return format!("${:<02X},X", args[0]);
+            format!("${:<02X},X", args[0])
         }
 
         // LDX $44,Y => b6 44
         AddressingMode::ZeroPage_Y => {
-            return format!("${:<02X},Y", args[0]);
+            format!("${:<02X},Y", args[0])
         }
 
         // LDA $4400,X => bd 00 44
         AddressingMode::Absolute_X => {
-            return format!("${:<02X}{:<02X},X", args[1], args[0]);
+            format!("${:<02X}{:<02X},X", args[1], args[0])
         }
 
         // LDA $4400,Y => b9 00 44
         AddressingMode::Absolute_Y => {
-            return format!("${:<02X}{:<02X},Y", args[1], args[0]);
+            format!("${:<02X}{:<02X},Y", args[1], args[0])
         }
         // JMP -> same Absolute
         AddressingMode::Indirect => {
-            return format!("${:<02X}{:<02X}", args[1], args[0]);
+            format!("${:<02X}{:<02X}", args[1], args[0])
         }
 
         // LDA ($44,X) => a1 44
         AddressingMode::Indirect_X => {
-            return format!("(${:<02X},X)", args[0]);
+            format!("(${:<02X},X)", args[0])
         }
 
         // LDA ($44),Y => b1 44
         AddressingMode::Indirect_Y => {
-            return format!("(${:<02X}),Y", args[0]);
+            format!("(${:<02X}),Y", args[0])
         }
 
         // BCC *+4 => 90 04
         AddressingMode::Relative => {
             // FIXME
-            return format!("*+{:X}", args[0]);
+            format!("*+{:X}", args[0])
         }
 
         AddressingMode::NoneAddressing => {
@@ -835,8 +829,26 @@ fn address(mode: &AddressingMode, args: &Vec<u8>) -> String {
     }
 }
 
-fn memory_access(mode: AddressingMode, args: &Vec<u8>) -> String {
-    return String::from("");
+fn memory_access(cpu: &CPU, mode: AddressingMode, args: &Vec<u8>) -> String {
+    match mode {
+        AddressingMode::Indirect_X => {
+            let base = args[0];
+            let ptr: u8 = (base as u8).wrapping_add(cpu.register_x);
+            let addr = cpu.mem_read_u16(ptr as u16);
+            let value = cpu.mem_read(addr);
+            format!("@ {:<02X} = {:<04X} = {:<02X}", ptr, addr, value)
+        }
+        AddressingMode::Indirect_Y => {
+            let base = args[0];
+            let deref_base = cpu.mem_read_u16(base as u16);
+            let deref = deref_base.wrapping_add(cpu.register_y as u16);
+            let value = cpu.mem_read(deref);
+            format!("= {:<04X} @ {:<04X} = {:<02X}", deref_base, deref, value)
+        }
+        _ => {
+            format!("")
+        }
+    }
 }
 
 fn cpu2str(cpu: &CPU) -> String {
