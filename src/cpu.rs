@@ -197,11 +197,13 @@ impl CPU {
         self.register_a = 0;
         self.register_x = 0;
         self.register_y = 0;
-        self.status = 0;
-        self.stack_pointer = 0xFF;
-        // TODO memoryリセット必要？？
+        // FIXME あってる？
+        self.status = FLAG_INTERRRUPT | FLAG_BREAK2;
+        self.stack_pointer = 0xFD;
 
         self.program_counter = self.mem_read_u16(0xFFFC);
+        // FIXME FOR TEST
+        self.program_counter = 0xC000;
     }
 
     pub fn load(&mut self) {
@@ -723,7 +725,7 @@ impl CPU {
     }
 }
 
-fn trace(cpu: &mut CPU) -> String {
+pub fn trace(cpu: &mut CPU) -> String {
     // 0064  A2 01     LDX #$01                        A:01 X:02 Y:03 P:24 SP:FD
     // OK 0064 => program_counter
     // OK A2 01 => binary code
@@ -745,7 +747,13 @@ fn trace(cpu: &mut CPU) -> String {
     let memacc = memory_access(cpu, ops.addressing_mode, &args);
     let status = cpu2str(cpu);
 
-    format!("{:<6}{:<10}{:<12}{:<20}{}", pc, bin, asm, memacc, status)
+    format!(
+        "{:<6}{:<10}{:<32}{}",
+        pc,
+        bin,
+        vec![asm, memacc].join(" "),
+        status
+    )
 }
 
 fn binary(op: u8, args: &Vec<u8>) -> String {
@@ -831,6 +839,10 @@ fn address(mode: &AddressingMode, args: &Vec<u8>) -> String {
 
 fn memory_access(cpu: &CPU, mode: AddressingMode, args: &Vec<u8>) -> String {
     match mode {
+        AddressingMode::ZeroPage => {
+            let value = cpu.mem_read(args[0] as u16);
+            format!("= {:<02X}", value)
+        }
         AddressingMode::Indirect_X => {
             let base = args[0];
             let ptr: u8 = (base as u8).wrapping_add(cpu.register_x);
@@ -867,7 +879,6 @@ mod test {
 
     #[test]
     fn test_format_trace() {
-        println!("AA");
         let mut bus = Bus::new(test_rom());
         bus.mem_write(100, 0xa2);
         bus.mem_write(101, 0x01);
@@ -902,7 +913,6 @@ mod test {
 
     #[test]
     fn test_format_mem_access() {
-        println!("BB");
         let mut bus = Bus::new(test_rom());
         // ORA ($33), Y
         bus.mem_write(100, 0x11);
