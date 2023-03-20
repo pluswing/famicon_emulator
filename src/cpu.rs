@@ -302,7 +302,9 @@ impl CPU {
     }
 
     pub fn php(&mut self, mode: &AddressingMode) {
-        self._push(self.status);
+        // FLAG_BREAKはスタックに入れない。
+        // FIXME: plpの修正が必要（ぽい）
+        self._push(self.status | FLAG_BREAK);
     }
 
     pub fn pla(&mut self, mode: &AddressingMode) {
@@ -743,7 +745,7 @@ pub fn trace(cpu: &mut CPU) -> String {
         args.push(arg);
     }
     let bin = binary(op, &args);
-    let asm = disasm(&ops, &args);
+    let asm = disasm(program_counter, &ops, &args);
     let memacc = memory_access(cpu, ops.addressing_mode, &args);
     let status = cpu2str(cpu);
 
@@ -765,11 +767,15 @@ fn binary(op: u8, args: &Vec<u8>) -> String {
     list.join(" ")
 }
 
-fn disasm(ops: &OpCode, args: &Vec<u8>) -> String {
-    format!("{} {}", ops.name, address(&ops.addressing_mode, args))
+fn disasm(program_counter: u16, ops: &OpCode, args: &Vec<u8>) -> String {
+    format!(
+        "{} {}",
+        ops.name,
+        address(program_counter, &ops.addressing_mode, args)
+    )
 }
 
-fn address(mode: &AddressingMode, args: &Vec<u8>) -> String {
+fn address(program_counter: u16, mode: &AddressingMode, args: &Vec<u8>) -> String {
     match mode {
         AddressingMode::Implied => {
             format!("")
@@ -827,8 +833,7 @@ fn address(mode: &AddressingMode, args: &Vec<u8>) -> String {
 
         // BCC *+4 => 90 04
         AddressingMode::Relative => {
-            // FIXME
-            format!("*+{:X}", args[0])
+            format!("${:<04X}", program_counter + args[0] as u16 + 2)
         }
 
         AddressingMode::NoneAddressing => {
