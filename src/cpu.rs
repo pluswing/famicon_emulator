@@ -175,6 +175,12 @@ impl CPU {
     }
 
     pub fn mem_read_u16(&self, pos: u16) -> u16 {
+        // FIXME
+        if pos == 0xFF || pos == 0x02FF {
+            let lo = self.mem_read(pos) as u16;
+            let hi = self.mem_read(pos & 0xFF00) as u16;
+            return (hi << 8) | (lo as u16);
+        }
         let lo = self.mem_read(pos) as u16;
         let hi = self.mem_read(pos + 1) as u16;
         (hi << 8) | (lo as u16)
@@ -810,9 +816,9 @@ fn address(program_counter: u16, ops: &OpCode, args: &Vec<u8>) -> String {
         AddressingMode::Absolute_Y => {
             format!("${:<02X}{:<02X},Y", args[1], args[0])
         }
-        // JMP -> same Absolute
+        // JMP
         AddressingMode::Indirect => {
-            format!("${:<02X}{:<02X}", args[1], args[0])
+            format!("(${:<02X}{:<02X})", args[1], args[0])
         }
 
         // LDA ($44,X) => a1 44
@@ -838,6 +844,13 @@ fn address(program_counter: u16, ops: &OpCode, args: &Vec<u8>) -> String {
 
 fn memory_access(cpu: &CPU, ops: &OpCode, args: &Vec<u8>) -> String {
     if ops.name.starts_with("J") {
+        if ops.addressing_mode == AddressingMode::Indirect {
+            let hi = args[1] as u16;
+            let lo = args[0] as u16;
+            let addr = hi << 8 | lo;
+            let value = cpu.mem_read_u16(addr);
+            return format!("= {:<04X}", value);
+        }
         return format!("");
     }
 
