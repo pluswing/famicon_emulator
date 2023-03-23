@@ -239,7 +239,7 @@ impl CPU {
                     callback(self);
                     call(self, &op);
                 }
-                _ => {}
+                _ => {} // panic!("no implementation {:<02X}", opscode),
             }
         }
     }
@@ -859,12 +859,38 @@ fn memory_access(cpu: &CPU, ops: &OpCode, args: &Vec<u8>) -> String {
             let value = cpu.mem_read(args[0] as u16);
             format!("= {:<02X}", value)
         }
+        AddressingMode::ZeroPage_X => {
+            let addr = args[0].wrapping_add(cpu.register_x) as u16;
+            let value = cpu.mem_read(addr);
+            format!("@ {:<02X} = {:<02X}", addr, value)
+        }
+        AddressingMode::ZeroPage_Y => {
+            let addr = args[0].wrapping_add(cpu.register_y) as u16;
+            let value = cpu.mem_read(addr);
+            format!("@ {:<02X} = {:<02X}", addr, value)
+        }
         AddressingMode::Absolute => {
             let hi = args[1] as u16;
             let lo = args[0] as u16;
             let addr = hi << 8 | lo;
             let value = cpu.mem_read(addr);
             format!("= {:<02X}", value)
+        }
+        AddressingMode::Absolute_X => {
+            let hi = args[1] as u16;
+            let lo = args[0] as u16;
+            let base = hi << 8 | lo;
+            let addr = base.wrapping_add(cpu.register_x as u16);
+            let value = cpu.mem_read(addr);
+            format!("@ {:<04X} = {:<02X}", addr, value)
+        }
+        AddressingMode::Absolute_Y => {
+            let hi = args[1] as u16;
+            let lo = args[0] as u16;
+            let base = hi << 8 | lo;
+            let addr = base.wrapping_add(cpu.register_y as u16);
+            let value = cpu.mem_read(addr);
+            format!("@ {:<04X} = {:<02X}", addr, value)
         }
         AddressingMode::Indirect_X => {
             let base = args[0];

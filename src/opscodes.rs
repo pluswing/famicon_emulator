@@ -155,6 +155,8 @@ lazy_static! {
     OpCode::new(0x8A, "TXA", 1, 2, AddressingMode::Implied),
     OpCode::new(0x9A, "TXS", 1, 2, AddressingMode::Implied),
     OpCode::new(0x98, "TYA", 1, 2, AddressingMode::Implied),
+
+    OpCode::new(0x04, "NOP", 2, 2, AddressingMode::ZeroPage),
   ];
 }
 
