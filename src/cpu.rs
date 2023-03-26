@@ -754,7 +754,7 @@ pub fn trace(cpu: &mut CPU) -> String {
     let status = cpu2str(cpu);
 
     format!(
-        "{:<6}{:<10}{:<32}{}",
+        "{:<6}{:<9}{:<33}{}",
         pc,
         bin,
         vec![asm, memacc].join(" "),
@@ -772,7 +772,13 @@ fn binary(op: u8, args: &Vec<u8>) -> String {
 }
 
 fn disasm(program_counter: u16, ops: &OpCode, args: &Vec<u8>) -> String {
-    format!("{} {}", ops.name, address(program_counter, &ops, args))
+    let prefix = if ops.name.starts_with("*") { "" } else { " " };
+    format!(
+        "{}{} {}",
+        prefix,
+        ops.name,
+        address(program_counter, &ops, args)
+    )
 }
 
 fn address(program_counter: u16, ops: &OpCode, args: &Vec<u8>) -> String {

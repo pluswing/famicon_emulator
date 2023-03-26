@@ -67,6 +67,20 @@ const main = async () => {
         })
     }).flat().join("\n")
 
+    const unofficialOps = [
+      `OpCode::new(0x04, "*NOP", 2, 2, AddressingMode::ZeroPage),`,
+      `OpCode::new(0x44, "*NOP", 2, 2, AddressingMode::ZeroPage),`,
+      `OpCode::new(0x64, "*NOP", 2, 2, AddressingMode::ZeroPage),`,
+      `OpCode::new(0x0C, "*NOP", 3, 2, AddressingMode::Absolute),`,
+      `OpCode::new(0x14, "*NOP", 2, 2, AddressingMode::ZeroPage_X),`,
+      `OpCode::new(0x34, "*NOP", 2, 2, AddressingMode::ZeroPage_X),`,
+      `OpCode::new(0x54, "*NOP", 2, 2, AddressingMode::ZeroPage_X),`,
+      `OpCode::new(0x74, "*NOP", 2, 2, AddressingMode::ZeroPage_X),`,
+      `OpCode::new(0xD4, "*NOP", 2, 2, AddressingMode::ZeroPage_X),`,
+      `OpCode::new(0xF4, "*NOP", 2, 2, AddressingMode::ZeroPage_X),`,
+      `OpCode::new(0x1A, "*NOP", 1, 2, AddressingMode::Implied),`,
+    ].join("\n")
+
     const header = `
 use crate::cpu::AddressingMode;
 use crate::cpu::OpCode;
@@ -77,12 +91,14 @@ use crate::cpu::CPU;
 lazy_static! {
   pub static ref CPU_OPS_CODES: Vec<OpCode> = vec![
 ${indent(opcodes, 2)}
+
+${indent(unofficialOps, 2)}
   ];
 }
 `
     const callCode = `
 pub fn call(cpu: &mut CPU, op: &OpCode) {
-  match op.name.as_str() {
+  match op.name.replace("*", "").as_str() {
 ${opsNames.map((name) => `
     "${name}" => {
       cpu.${name.toLowerCase()}(&op.addressing_mode);
