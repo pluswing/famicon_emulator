@@ -253,6 +253,11 @@ impl CPU {
         return None;
     }
 
+    pub fn lax(&mut self, mode: &AddressingMode) {
+        self.lda(mode);
+        self.tax(mode);
+    }
+
     pub fn txs(&mut self, mode: &AddressingMode) {
         self.stack_pointer = self.register_x;
     }
@@ -839,7 +844,10 @@ fn address(program_counter: u16, ops: &OpCode, args: &Vec<u8>) -> String {
 
         // BCC *+4 => 90 04
         AddressingMode::Relative => {
-            format!("${:<04X}", program_counter + args[0] as u16 + 2)
+            format!(
+                "${:<04X}",
+                (program_counter as i32 + (args[0] as i8) as i32) as u16 + 2
+            )
         }
 
         AddressingMode::NoneAddressing => {

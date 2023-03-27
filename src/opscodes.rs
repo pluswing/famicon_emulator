@@ -167,6 +167,20 @@ lazy_static! {
     OpCode::new(0xD4, "*NOP", 2, 2, AddressingMode::ZeroPage_X),
     OpCode::new(0xF4, "*NOP", 2, 2, AddressingMode::ZeroPage_X),
     OpCode::new(0x1A, "*NOP", 1, 2, AddressingMode::Implied),
+    OpCode::new(0x3A, "*NOP", 1, 2, AddressingMode::Implied),
+    OpCode::new(0x5A, "*NOP", 1, 2, AddressingMode::Implied),
+    OpCode::new(0x7A, "*NOP", 1, 2, AddressingMode::Implied),
+    OpCode::new(0xDA, "*NOP", 1, 2, AddressingMode::Implied),
+    OpCode::new(0xFA, "*NOP", 1, 2, AddressingMode::Implied),
+    OpCode::new(0x80, "*NOP", 2, 2, AddressingMode::Immediate),
+    OpCode::new(0x1C, "*NOP", 3, 2, AddressingMode::Absolute_X),
+    OpCode::new(0x3C, "*NOP", 3, 2, AddressingMode::Absolute_X),
+    OpCode::new(0x5C, "*NOP", 3, 2, AddressingMode::Absolute_X),
+    OpCode::new(0x7C, "*NOP", 3, 2, AddressingMode::Absolute_X),
+    OpCode::new(0xDC, "*NOP", 3, 2, AddressingMode::Absolute_X),
+    OpCode::new(0xFC, "*NOP", 3, 2, AddressingMode::Absolute_X),
+    OpCode::new(0xA3, "*LAX", 2, 2, AddressingMode::Indirect_X),
+    OpCode::new(0xA7, "*LAX", 2, 2, AddressingMode::ZeroPage),
   ];
 }
 
@@ -451,6 +465,11 @@ pub fn call(cpu: &mut CPU, op: &OpCode) {
 
     "TYA" => {
       cpu.tya(&op.addressing_mode);
+      cpu.program_counter += op.bytes - 1
+    }
+
+    "LAX" => {
+      cpu.lax(&op.addressing_mode);
       cpu.program_counter += op.bytes - 1
     }
 

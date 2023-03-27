@@ -67,19 +67,42 @@ const main = async () => {
         })
     }).flat().join("\n")
 
-    const unofficialOps = [
-      `OpCode::new(0x04, "*NOP", 2, 2, AddressingMode::ZeroPage),`,
-      `OpCode::new(0x44, "*NOP", 2, 2, AddressingMode::ZeroPage),`,
-      `OpCode::new(0x64, "*NOP", 2, 2, AddressingMode::ZeroPage),`,
-      `OpCode::new(0x0C, "*NOP", 3, 2, AddressingMode::Absolute),`,
-      `OpCode::new(0x14, "*NOP", 2, 2, AddressingMode::ZeroPage_X),`,
-      `OpCode::new(0x34, "*NOP", 2, 2, AddressingMode::ZeroPage_X),`,
-      `OpCode::new(0x54, "*NOP", 2, 2, AddressingMode::ZeroPage_X),`,
-      `OpCode::new(0x74, "*NOP", 2, 2, AddressingMode::ZeroPage_X),`,
-      `OpCode::new(0xD4, "*NOP", 2, 2, AddressingMode::ZeroPage_X),`,
-      `OpCode::new(0xF4, "*NOP", 2, 2, AddressingMode::ZeroPage_X),`,
-      `OpCode::new(0x1A, "*NOP", 1, 2, AddressingMode::Implied),`,
-    ].join("\n")
+    const modeBytes = {
+      "Implied": 1,
+      "Immediate": 2,
+      "ZeroPage": 2,
+      "ZeroPage_X": 2,
+      "Absolute": 3,
+      "Absolute_X": 3,
+      "Indirect_X": 2,
+    }
+
+    const unofficialOps = {
+      "NOP": {
+        "ZeroPage": ["04", "44", "64"],
+        "Absolute": ["0C"],
+        "ZeroPage_X": ["14", "34", "54", "74", "D4", "F4"],
+        "Implied": ["1A","3A","5A","7A", "DA", "FA"],
+        "Immediate": ["80"],
+        "Absolute_X": ["1C","3C","5C","7C", "DC", "FC"],
+      },
+      "LAX": {
+        "Indirect_X": ["A3"],
+        "ZeroPage": ["A7"],
+      }
+    }
+
+    const unofficialOpsCode = Object.keys(unofficialOps).map((name) => {
+      return Object.keys(unofficialOps[name]).map((mode) => {
+        return unofficialOps[name][mode].map((code) => {
+          const cycles = 2;
+          return `OpCode::new(0x${code}, "*${name}", ${modeBytes[mode]}, ${cycles}, AddressingMode::${mode}),`
+        })
+      }).flat()
+    }).flat().join("\n")
+
+    // FIXME
+    opsNames.push("LAX");
 
     const header = `
 use crate::cpu::AddressingMode;
@@ -92,7 +115,7 @@ lazy_static! {
   pub static ref CPU_OPS_CODES: Vec<OpCode> = vec![
 ${indent(opcodes, 2)}
 
-${indent(unofficialOps, 2)}
+${indent(unofficialOpsCode, 2)}
   ];
 }
 `
