@@ -181,6 +181,15 @@ lazy_static! {
     OpCode::new(0xFC, "*NOP", 3, 2, AddressingMode::Absolute_X),
     OpCode::new(0xA3, "*LAX", 2, 2, AddressingMode::Indirect_X),
     OpCode::new(0xA7, "*LAX", 2, 2, AddressingMode::ZeroPage),
+    OpCode::new(0xAF, "*LAX", 3, 2, AddressingMode::Absolute),
+    OpCode::new(0xB3, "*LAX", 2, 2, AddressingMode::Indirect_Y),
+    OpCode::new(0xB7, "*LAX", 2, 2, AddressingMode::ZeroPage_Y),
+    OpCode::new(0xBF, "*LAX", 3, 2, AddressingMode::Absolute_Y),
+    OpCode::new(0x83, "*SAX", 2, 2, AddressingMode::Indirect_X),
+    OpCode::new(0x87, "*SAX", 2, 2, AddressingMode::ZeroPage),
+    OpCode::new(0x8F, "*SAX", 3, 2, AddressingMode::Absolute),
+    OpCode::new(0x97, "*SAX", 2, 2, AddressingMode::ZeroPage_Y),
+    OpCode::new(0xEB, "*SBC", 2, 2, AddressingMode::Immediate),
   ];
 }
 
@@ -470,6 +479,11 @@ pub fn call(cpu: &mut CPU, op: &OpCode) {
 
     "LAX" => {
       cpu.lax(&op.addressing_mode);
+      cpu.program_counter += op.bytes - 1
+    }
+
+    "SAX" => {
+      cpu.sax(&op.addressing_mode);
       cpu.program_counter += op.bytes - 1
     }
 

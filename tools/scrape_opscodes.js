@@ -68,27 +68,43 @@ const main = async () => {
     }).flat().join("\n")
 
     const modeBytes = {
-      "Implied": 1,
-      "Immediate": 2,
-      "ZeroPage": 2,
-      "ZeroPage_X": 2,
-      "Absolute": 3,
-      "Absolute_X": 3,
-      "Indirect_X": 2,
+      Implied: 1,
+      Immediate: 2,
+      ZeroPage: 2,
+      ZeroPage_X: 2,
+      ZeroPage_Y: 2,
+      Absolute: 3,
+      Absolute_X: 3,
+      Absolute_Y: 3,
+      Indirect_X: 2,
+      Indirect_Y: 2,
     }
 
     const unofficialOps = {
-      "NOP": {
-        "ZeroPage": ["04", "44", "64"],
-        "Absolute": ["0C"],
-        "ZeroPage_X": ["14", "34", "54", "74", "D4", "F4"],
-        "Implied": ["1A","3A","5A","7A", "DA", "FA"],
-        "Immediate": ["80"],
-        "Absolute_X": ["1C","3C","5C","7C", "DC", "FC"],
+      NOP: {
+        ZeroPage: ["04", "44", "64"],
+        Absolute: ["0C"],
+        ZeroPage_X: ["14", "34", "54", "74", "D4", "F4"],
+        Implied: ["1A","3A","5A","7A", "DA", "FA"],
+        Immediate: ["80"],
+        Absolute_X: ["1C","3C","5C","7C", "DC", "FC"],
       },
-      "LAX": {
-        "Indirect_X": ["A3"],
-        "ZeroPage": ["A7"],
+      LAX: {
+        Indirect_X: ["A3"],
+        ZeroPage: ["A7"],
+        Absolute: ["AF"],
+        Indirect_Y: ["B3"],
+        ZeroPage_Y: ["B7"],
+        Absolute_Y: ["BF"],
+      },
+      SAX: {
+        Indirect_X: ["83"],
+        ZeroPage: ["87"],
+        Absolute: ["8F"],
+        ZeroPage_Y: ["97"],
+      },
+      SBC: {
+        Immediate: ["EB"],
       }
     }
 
@@ -101,8 +117,11 @@ const main = async () => {
       }).flat()
     }).flat().join("\n")
 
-    // FIXME
-    opsNames.push("LAX");
+    Object.keys(unofficialOps).forEach((name) => {
+      if (!opsNames.includes(name)) {
+        opsNames.push(name)
+      }
+    })
 
     const header = `
 use crate::cpu::AddressingMode;
