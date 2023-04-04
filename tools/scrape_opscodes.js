@@ -19,6 +19,59 @@ const indent = (code, n) => {
   return code.split("\n").map(l => `${space}${l}`).join("\n")
 }
 
+const fetchUnofficialOps = async () => {
+  const res = await axios.get("https://www.nesdev.org/undocumented_opcodes.txt")
+  const lines = res.data.split("\n")
+  const keyMap = {
+    "Implied": "Implied",
+    "Immediate": "Immediate",
+    "Zero Page": "ZeroPage",
+    "Zero Page,X": "ZeroPage_X",
+    "Zero Page,Y": "ZeroPage_X",
+    "Absolute": "Absolute",
+    "Absolute,X": "Absolute_X",
+    "Absolute,Y": "Absolute_Y",
+    "(Indirect,X)": "Indirect_X",
+    "(Indirect),Y": "Indirect_Y",
+  }
+  const codes = []
+  let found = false
+  let l = []
+  let op = ""
+  const ops = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i] === "=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D") {
+      if (found && op) {
+        const s = l.findIndex((v) => v.startsWith("------------"))
+        l = l.slice(s + 1)
+        const e = l.findIndex((v) => v === "")
+        l = l.slice(0, e)
+        const m = op.match(/\((.+)\)/)
+        const name = m[1];
+        codes.push(l.map((v) => {
+          const s = v.split("|").map((v) => v.trim())
+          return [s[0], s[2], s[3], s[4]]
+        }).map((l) => {
+          const mode = keyMap[l[0]]
+          const code = l[1].replace("$", "")
+          const bytes = l[2]
+          const comment = l[3].match(/\*/) ? " /* (+ some cycles) */" : ""
+          const cycles = l[3].replace(/ |\*/g, "").replace("-", "0")
+          return `OpCode::new(0x${code}, "*${name}", ${bytes}, ${cycles}${comment}, AddressingMode::${mode}),`
+        }));
+        ops.push(name)
+      }
+      op = lines[i - 1]
+      l = [];
+      found = true;
+    }
+    if (found) {
+      l.push(lines[i])
+    }
+  }
+  return [ops, codes.flat()];
+}
+
 const main = async () => {
   const res = await axios.get("https://www.nesdev.org/obelisk-6502-guide/reference.html")
   const dom = new jsdom.JSDOM(res.data)
@@ -67,84 +120,10 @@ const main = async () => {
     })
   }).flat().join("\n")
 
-  const modeBytes = {
-    Implied: 1,
-    Immediate: 2,
-    ZeroPage: 2,
-    ZeroPage_X: 2,
-    ZeroPage_Y: 2,
-    Absolute: 3,
-    Absolute_X: 3,
-    Absolute_Y: 3,
-    Indirect_X: 2,
-    Indirect_Y: 2,
-  }
+  const [onofficialNames, unofficialOps] = await fetchUnofficialOps();
+  const unofficialOpsCode = unofficialOps.join("\n")
 
-  const unofficialOps = {
-    NOP: {
-      ZeroPage: ["04", "44", "64"],
-      Absolute: ["0C"],
-      ZeroPage_X: ["14", "34", "54", "74", "D4", "F4"],
-      Implied: ["1A", "3A", "5A", "7A", "DA", "FA"],
-      Immediate: ["80"],
-      Absolute_X: ["1C", "3C", "5C", "7C", "DC", "FC"],
-    },
-    LAX: {
-      Indirect_X: ["A3"],
-      ZeroPage: ["A7"],
-      Absolute: ["AF"],
-      Indirect_Y: ["B3"],
-      ZeroPage_Y: ["B7"],
-      Absolute_Y: ["BF"],
-    },
-    SAX: {
-      Indirect_X: ["83"],
-      ZeroPage: ["87"],
-      Absolute: ["8F"],
-      ZeroPage_Y: ["97"],
-    },
-    SBC: {
-      Immediate: ["EB"],
-    },
-    DCP: {
-      Indirect_X: ["C3"],
-      ZeroPage: ["C7"],
-      Absolute: ["CF"],
-      Indirect_Y: ["D3"],
-      ZeroPage_X: ["D7"],
-      Absolute_Y: ["DB"],
-      Absolute_X: ["DF"],
-    },
-    ISB: {
-      Indirect_X: ["E3"],
-      ZeroPage: ["E7"],
-      Absolute: ["EF"],
-      Indirect_Y: ["F3"],
-      ZeroPage_X: ["F7"],
-      Absolute_Y: ["FB"],
-      Absolute_X: ["FF"],
-    },
-    SLO: {
-      Indirect_X: ["03"],
-      ZeroPage: ["07"],
-      Absolute: ["0F"],
-      Indirect_Y: ["13"],
-      ZeroPage_X: ["17"],
-      Absolute_Y: ["1B"],
-      Absolute_X: ["1F"],
-    }
-  }
-
-  const unofficialOpsCode = Object.keys(unofficialOps).map((name) => {
-    return Object.keys(unofficialOps[name]).map((mode) => {
-      return unofficialOps[name][mode].map((code) => {
-        const cycles = 2;
-        return `OpCode::new(0x${code}, "*${name}", ${modeBytes[mode]}, ${cycles}, AddressingMode::${mode}),`
-      })
-    }).flat()
-  }).flat().join("\n")
-
-  Object.keys(unofficialOps).forEach((name) => {
+  onofficialNames.forEach((name) => {
     if (!opsNames.includes(name)) {
       opsNames.push(name)
     }
