@@ -190,6 +190,27 @@ lazy_static! {
     OpCode::new(0x8F, "*SAX", 3, 2, AddressingMode::Absolute),
     OpCode::new(0x97, "*SAX", 2, 2, AddressingMode::ZeroPage_Y),
     OpCode::new(0xEB, "*SBC", 2, 2, AddressingMode::Immediate),
+    OpCode::new(0xC3, "*DCP", 2, 2, AddressingMode::Indirect_X),
+    OpCode::new(0xC7, "*DCP", 2, 2, AddressingMode::ZeroPage),
+    OpCode::new(0xCF, "*DCP", 3, 2, AddressingMode::Absolute),
+    OpCode::new(0xD3, "*DCP", 2, 2, AddressingMode::Indirect_Y),
+    OpCode::new(0xD7, "*DCP", 2, 2, AddressingMode::ZeroPage_X),
+    OpCode::new(0xDB, "*DCP", 3, 2, AddressingMode::Absolute_Y),
+    OpCode::new(0xDF, "*DCP", 3, 2, AddressingMode::Absolute_X),
+    OpCode::new(0xE3, "*ISB", 2, 2, AddressingMode::Indirect_X),
+    OpCode::new(0xE7, "*ISB", 2, 2, AddressingMode::ZeroPage),
+    OpCode::new(0xEF, "*ISB", 3, 2, AddressingMode::Absolute),
+    OpCode::new(0xF3, "*ISB", 2, 2, AddressingMode::Indirect_Y),
+    OpCode::new(0xF7, "*ISB", 2, 2, AddressingMode::ZeroPage_X),
+    OpCode::new(0xFB, "*ISB", 3, 2, AddressingMode::Absolute_Y),
+    OpCode::new(0xFF, "*ISB", 3, 2, AddressingMode::Absolute_X),
+    OpCode::new(0x03, "*SLO", 2, 2, AddressingMode::Indirect_X),
+    OpCode::new(0x07, "*SLO", 2, 2, AddressingMode::ZeroPage),
+    OpCode::new(0x0F, "*SLO", 3, 2, AddressingMode::Absolute),
+    OpCode::new(0x13, "*SLO", 2, 2, AddressingMode::Indirect_Y),
+    OpCode::new(0x17, "*SLO", 2, 2, AddressingMode::ZeroPage_X),
+    OpCode::new(0x1B, "*SLO", 3, 2, AddressingMode::Absolute_Y),
+    OpCode::new(0x1F, "*SLO", 3, 2, AddressingMode::Absolute_X),
   ];
 }
 
@@ -484,6 +505,21 @@ pub fn call(cpu: &mut CPU, op: &OpCode) {
 
     "SAX" => {
       cpu.sax(&op.addressing_mode);
+      cpu.program_counter += op.bytes - 1
+    }
+
+    "DCP" => {
+      cpu.dcp(&op.addressing_mode);
+      cpu.program_counter += op.bytes - 1
+    }
+
+    "ISB" => {
+      cpu.isb(&op.addressing_mode);
+      cpu.program_counter += op.bytes - 1
+    }
+
+    "SLO" => {
+      cpu.slo(&op.addressing_mode);
       cpu.program_counter += op.bytes - 1
     }
 
