@@ -253,6 +253,33 @@ impl CPU {
         return None;
     }
 
+    pub fn anc(&mut self, mode: &AddressingMode) {}
+    pub fn arr(&mut self, mode: &AddressingMode) {}
+    pub fn asr(&mut self, mode: &AddressingMode) {}
+    pub fn lxa(&mut self, mode: &AddressingMode) {}
+    pub fn sha(&mut self, mode: &AddressingMode) {}
+    pub fn sbx(&mut self, mode: &AddressingMode) {}
+    pub fn jam(&mut self, mode: &AddressingMode) {}
+    pub fn lae(&mut self, mode: &AddressingMode) {}
+    pub fn shx(&mut self, mode: &AddressingMode) {}
+    pub fn shy(&mut self, mode: &AddressingMode) {}
+    pub fn ane(&mut self, mode: &AddressingMode) {}
+
+    pub fn rra(&mut self, mode: &AddressingMode) {
+        self.ror(mode);
+        self.adc(mode);
+    }
+
+    pub fn sre(&mut self, mode: &AddressingMode) {
+        self.lsr(mode);
+        self.eor(mode);
+    }
+
+    pub fn rla(&mut self, mode: &AddressingMode) {
+        self.rol(mode);
+        self.and(mode);
+    }
+
     pub fn slo(&mut self, mode: &AddressingMode) {
         self.asl(mode);
         self.ora(mode);

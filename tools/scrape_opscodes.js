@@ -27,7 +27,7 @@ const fetchUnofficialOps = async () => {
     "Immediate": "Immediate",
     "Zero Page": "ZeroPage",
     "Zero Page,X": "ZeroPage_X",
-    "Zero Page,Y": "ZeroPage_X",
+    "Zero Page,Y": "ZeroPage_Y",
     "Absolute": "Absolute",
     "Absolute,X": "Absolute_X",
     "Absolute,Y": "Absolute_Y",
