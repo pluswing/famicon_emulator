@@ -21,7 +21,7 @@ const indent = (code, n) => {
 
 const fetchUnofficialOps = async () => {
   const res = await axios.get("https://www.nesdev.org/undocumented_opcodes.txt")
-  const lines = res.data.split("\n")
+  const lines = [...res.data.split("\n"), ""]
   const keyMap = {
     "Implied": "Implied",
     "Immediate": "Immediate",
@@ -34,32 +34,21 @@ const fetchUnofficialOps = async () => {
     "(Indirect,X)": "Indirect_X",
     "(Indirect),Y": "Indirect_Y",
   }
-  const codes = []
+  const defs = []
   let found = false
   let l = []
   let op = ""
-  const ops = [];
   for (let i = 0; i < lines.length; i++) {
     if (lines[i] === "=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D=3D") {
       if (found && op) {
+        const m = op.match(/\((.+)\)/)
+        const name = m[1];
+
         const s = l.findIndex((v) => v.startsWith("------------"))
         l = l.slice(s + 1)
         const e = l.findIndex((v) => v === "")
         l = l.slice(0, e)
-        const m = op.match(/\((.+)\)/)
-        const name = m[1];
-        codes.push(l.map((v) => {
-          const s = v.split("|").map((v) => v.trim())
-          return [s[0], s[2], s[3], s[4]]
-        }).map((l) => {
-          const mode = keyMap[l[0]]
-          const code = l[1].replace("$", "")
-          const bytes = l[2]
-          const comment = l[3].match(/\*/) ? " /* (+ some cycles) */" : ""
-          const cycles = l[3].replace(/ |\*/g, "").replace("-", "0")
-          return `OpCode::new(0x${code}, "*${name}", ${bytes}, ${cycles}${comment}, AddressingMode::${mode}),`
-        }));
-        ops.push(name)
+        defs.push([name, l])
       }
       op = lines[i - 1]
       l = [];
@@ -69,7 +58,28 @@ const fetchUnofficialOps = async () => {
       l.push(lines[i])
     }
   }
-  return [ops, codes.flat()];
+
+  const m = op.match(/\((.+)\)/)
+  const name = m[1];
+
+  const s = l.findIndex((v) => v.startsWith("------------"))
+  l = l.slice(s + 1)
+  const e = l.findIndex((v) => v === "")
+  l = l.slice(0, e)
+  defs.push([name, l])
+
+  const codes = defs.map(([name, lines]) => {
+    return lines.map((v) => {
+      const s = v.split("|").map((v) => v.trim())
+      const mode = keyMap[s[0]]
+      const code = s[2].replace("$", "")
+      const bytes = s[3]
+      const comment = s[4].match(/\*/) ? " /* (+ some cycles) */" : ""
+      const cycles = s[4].replace(/ |\*/g, "").replace("-", "0")
+      return `OpCode::new(0x${code}, "*${name}", ${bytes}, ${cycles}${comment}, AddressingMode::${mode}),`
+    });
+  }).flat();
+  return [defs.map((v) => v[0]), codes];
 }
 
 const main = async () => {
@@ -120,10 +130,10 @@ const main = async () => {
     })
   }).flat().join("\n")
 
-  const [onofficialNames, unofficialOps] = await fetchUnofficialOps();
+  const [unofficialNames, unofficialOps] = await fetchUnofficialOps();
   const unofficialOpsCode = unofficialOps.join("\n")
 
-  onofficialNames.forEach((name) => {
+  unofficialNames.forEach((name) => {
     if (!opsNames.includes(name)) {
       opsNames.push(name)
     }

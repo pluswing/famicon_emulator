@@ -264,6 +264,7 @@ impl CPU {
     pub fn shx(&mut self, mode: &AddressingMode) {}
     pub fn shy(&mut self, mode: &AddressingMode) {}
     pub fn ane(&mut self, mode: &AddressingMode) {}
+    pub fn shs(&mut self, mode: &AddressingMode) {}
 
     pub fn rra(&mut self, mode: &AddressingMode) {
         self.ror(mode);

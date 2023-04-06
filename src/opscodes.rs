@@ -260,6 +260,7 @@ lazy_static! {
     OpCode::new(0xDC, "*NOP", 3, 4 /* (+ some cycles) */, AddressingMode::Absolute_X),
     OpCode::new(0xFC, "*NOP", 3, 4 /* (+ some cycles) */, AddressingMode::Absolute_X),
     OpCode::new(0x8B, "*ANE", 2, 2, AddressingMode::Immediate),
+    OpCode::new(0x9B, "*SHS", 3, 5, AddressingMode::Absolute_Y),
   ];
 }
 
@@ -639,6 +640,11 @@ pub fn call(cpu: &mut CPU, op: &OpCode) {
 
     "ANE" => {
       cpu.ane(&op.addressing_mode);
+      cpu.program_counter += op.bytes - 1
+    }
+
+    "SHS" => {
+      cpu.shs(&op.addressing_mode);
       cpu.program_counter += op.bytes - 1
     }
 
