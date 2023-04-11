@@ -1,3 +1,5 @@
+use crate::rom::Mirroring;
+
 pub struct NesPPU {
     pub chr_rom: Vec<u8>,
     pub palette_table: [u8; 32],
@@ -5,6 +7,9 @@ pub struct NesPPU {
     pub oam_data: [u8; 256],
 
     pub mirroring: Mirroring,
+
+    addr: AddrRegister,
+    pub ctrl: ControlRegister,
 }
 
 impl NesPPU {
@@ -15,6 +20,36 @@ impl NesPPU {
             vram: [0; 2048],
             oam_data: [0; 64 * 4],
             palette_table: [0; 32],
+        }
+    }
+
+    fn write_to_ppu_addr(&mut self, value: u8) {
+        self.addr.update(value);
+    }
+
+    fn write_to_ctrl(&mut self, value: u8) {
+        self.ctrl.update(value);
+    }
+
+    fn increment_vram_addr(&mut self) {
+        self.addr.increment(self.ctrl.vram_addr_increment());
+    }
+
+    fn read_data(&mut self) -> u8 {
+        let addr = self.addr.get();
+        self.increment_vram_addr();
+
+        match addr {
+            0..=0x1FFF => todo!("read from chr_rom"),
+            0x2000..=0x2FFF => todo!("read from RAM"),
+            0x3000..=0x3EFF => panic(
+                "addr space 0x3000..0x3EFF is not expecred to be used, requested = {} ",
+                addr,
+            ),
+            0x3F00..=0x3FFF => {
+                self.palette_table[(addr - 0x3F00) as usize];
+            }
+            _ => panic!("unexpected access to mirrored space {}", addr),
         }
     }
 }
@@ -67,5 +102,36 @@ impl AddrRegister {
 
     pub fn get(&self) -> u16 {
         ((self.value.0 as u16) << 8) | (self.value.1 as u16)
+    }
+}
+
+bitflags! {
+  pub struct ControlRegister: u8 {
+    const NAMETABLE1               = 0b0000_0001;
+    const NAMETABLE2               = 0b0000_0010;
+    const VRAM_ADD_INCREMENT       = 0b0000_0100;
+    const SPRITE_PATTERN_ADDR      = 0b0000_1000;
+    const BACKGROUND_PATTERN_ADDR  = 0b0001_0000;
+    const SPRITE_SIZE              = 0b0010_0000;
+    const MASTER_SLAVE_SELECT      = 0b0100_0000;
+    const GENERATE_NMI             = 0b1000_0000;
+  }
+}
+
+impl ControlRegister {
+    pub fn new() -> Self {
+        ControlRegister::from_bits_truncate(0b0000_0000)
+    }
+
+    pub fn vram_addr_increment(&self) -> u8 {
+        if !self.contains(ControlRegister::VRAM_ADD_INCREMENT) {
+            1
+        } else {
+            32
+        }
+    }
+
+    pub fn update(&mut self, data: u8) {
+        self.bits = data;
     }
 }
