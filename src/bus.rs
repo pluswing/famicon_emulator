@@ -1,25 +1,29 @@
+use crate::ppu::NesPPU;
 use crate::rom::Rom;
 
 pub struct Bus {
     cpu_vram: [u8; 2048],
-    rom: Rom,
+    prg_rom: Vec<u8>,
+    ppu: NesPPU,
 }
 
 impl Bus {
     pub fn new(rom: Rom) -> Self {
+        let ppu = NesPPU::new(rom.chr_rom, rom.screen_mirroring);
         Bus {
             cpu_vram: [0; 2048],
-            rom: rom,
+            prg_rom: rom.prg_rom,
+            ppu: ppu,
         }
     }
 
     fn read_prg_rom(&self, mut addr: u16) -> u8 {
         addr -= 0x8000;
-        if self.rom.prg_rom.len() == 0x4000 && addr >= 0x4000 {
+        if self.prg_rom.len() == 0x4000 && addr >= 0x4000 {
             // mirror if needed
             addr = addr % 0x4000;
         }
-        self.rom.prg_rom[addr as usize]
+        self.prg_rom[addr as usize]
     }
 }
 
@@ -43,9 +47,13 @@ impl Mem for Bus {
                 let mirror_down_addr = addr & 0b_0000_0111_1111_1111;
                 self.cpu_vram[mirror_down_addr as usize]
             }
-            PPU_REGISTERS..=PPU_REGISTERS_MIRRORS_END => {
-                let mirror_down_addr = addr & 0b_0010_0000_0000_0111;
-                todo!("PPU is not supported yet")
+            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 | 0x4014 => {
+                panic!("Attempt to read from write-only PPU address {:X}", addr);
+            }
+            0x2007 => self.ppu.read_data(),
+            0x2008..=PPU_REGISTERS_MIRRORS_END => {
+                let mirror_down_addr = addr & 0b00100000_00000111;
+                self.mem_read(mirror_down_addr)
             }
             PRG_ROM..=PRG_ROM_END => self.read_prg_rom(addr),
             _ => {

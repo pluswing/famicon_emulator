@@ -5,6 +5,7 @@ mod bus;
 mod cartridge;
 mod cpu;
 mod opscodes;
+mod ppu;
 mod rom;
 
 use crate::cpu::trace;
