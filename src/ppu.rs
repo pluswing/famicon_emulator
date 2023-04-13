@@ -16,21 +16,24 @@ pub struct NesPPU {
 }
 
 impl NesPPU {
-    pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring) -> self {
+    pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring) -> Self {
         NesPPU {
             chr_rom: chr_rom,
             mirroring: mirroring,
             vram: [0; 2048],
             oam_data: [0; 64 * 4],
             palette_table: [0; 32],
+            addr: AddrRegister::new(),
+            ctrl: ControlRegister::new(),
+            internal_data_buf: 0,
         }
     }
 
-    fn write_to_ppu_addr(&mut self, value: u8) {
+    pub fn write_to_ppu_addr(&mut self, value: u8) {
         self.addr.update(value);
     }
 
-    fn write_to_ctrl(&mut self, value: u8) {
+    pub fn write_to_ctrl(&mut self, value: u8) {
         self.ctrl.update(value);
     }
 
@@ -57,9 +60,7 @@ impl NesPPU {
                 "addr space 0x3000..0x3EFF is not expected to be used, requested = {} ",
                 addr,
             ),
-            0x3F00..=0x3FFF => {
-                self.palette_table[(addr - 0x3F00) as usize];
-            }
+            0x3F00..=0x3FFF => self.palette_table[(addr - 0x3F00) as usize],
             _ => panic!("unexpected access to mirrored space {}", addr),
         }
     }
@@ -69,7 +70,8 @@ impl NesPPU {
         let vram_index = mirrored_vram - 0x2000;
         let name_table = vram_index / 0x400;
         match (&self.mirroring, name_table) {
-            (Mirroring::VERTICAL, 2) | (Mirroring::VERTICAL, 3) => vram_index - 0x800,
+            (Mirroring::VERTICAL, 2) => vram_index - 0x800,
+            (Mirroring::VERTICAL, 3) => vram_index - 0x800,
             (Mirroring::HORIZONTAL, 2) => vram_index - 0x400,
             (Mirroring::HORIZONTAL, 1) => vram_index - 0x400,
             (Mirroring::HORIZONTAL, 3) => vram_index - 0x800,
@@ -156,6 +158,7 @@ impl ControlRegister {
     }
 
     pub fn update(&mut self, data: u8) {
+        // FIXME
         self.bits = data;
     }
 }
