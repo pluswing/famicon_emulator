@@ -26,7 +26,7 @@ pub struct OpCode {
     pub code: u8,
     pub name: String,
     pub bytes: u16,
-    pub cycles: u16,
+    pub cycles: u8,
     pub addressing_mode: AddressingMode,
 }
 
@@ -225,6 +225,9 @@ impl CPU {
         F: FnMut(&mut CPU),
     {
         loop {
+            if let Some(_nmi) = self.bus.poll_nmi_status() {
+                self.interrupt_nmi();
+            }
             let opscode = self.mem_read(self.program_counter);
             self.program_counter += 1;
 
@@ -238,10 +241,28 @@ impl CPU {
                     }
                     callback(self);
                     call(self, &op);
+
+                    self.bus.tick(op.cycles);
+
+                    // if program_conter_state == self.program_counter {
+                    //   self.program_counter += (op.len - 1) as u16
+                    // }
                 }
                 _ => {} // panic!("no implementation {:<02X}", opscode),
             }
         }
+    }
+
+    fn interrupt_nmi(&mut self) {
+        self._push_u16(self.program_counter);
+        let mut status = self.status;
+        status = status & !FLAG_BREAK;
+        status = status | FLAG_BREAK2;
+        self._push(status);
+
+        self.status = self.status | FLAG_INTERRRUPT;
+        self.bus.tick(2);
+        self.program_counter = self.mem_read_u16(0xFFFA);
     }
 
     fn find_ops(&mut self, opscode: u8) -> Option<OpCode> {

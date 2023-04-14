@@ -13,6 +13,9 @@ pub struct NesPPU {
     addr: AddrRegister,
     pub ctrl: ControlRegister,
     internal_data_buf: u8,
+
+    cycles: usize,
+    scanline: usize,
 }
 
 impl NesPPU {
@@ -26,6 +29,8 @@ impl NesPPU {
             addr: AddrRegister::new(),
             ctrl: ControlRegister::new(),
             internal_data_buf: 0,
+            cycles: 0,
+            scanline: 0,
         }
     }
 
@@ -77,6 +82,28 @@ impl NesPPU {
             (Mirroring::HORIZONTAL, 3) => vram_index - 0x800,
             _ => vram_index,
         }
+    }
+
+    pub fn tick(&mut self, cycles: u8) -> bool {
+        self.cycles += cycles as usize;
+        if self.cycles >= 341 {
+            self.cycles = self.cycles - 341;
+            self.scanline += 1;
+
+            if self.scanline == 241 {
+                if self.ctrl.generate_vblank_nmi() {
+                    self.status.set_vbrank_status(true);
+                    todo!("Should trigger NMI interupt")
+                }
+            }
+
+            if self.scanline >= 262 {
+                self.scanline = 0;
+                self.status.reset_vblank_status();
+                return true;
+            }
+        }
+        return false;
     }
 }
 
@@ -158,7 +185,7 @@ impl ControlRegister {
     }
 
     pub fn update(&mut self, data: u8) {
-        // FIXME
-        self.bits = data;
+        // TODO 要確認
+        *self.0.bits_mut() = data;
     }
 }
