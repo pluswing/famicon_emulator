@@ -58,6 +58,8 @@ impl Mem for Bus {
             0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 | 0x4014 => {
                 panic!("Attempt to read from write-only PPU address {:X}", addr);
             }
+            // TODO 0x2002 => status
+            // TODO 0x2004 => OAM Data
             0x2007 => self.ppu.read_data(),
             0x2008..=PPU_REGISTERS_MIRRORS_END => {
                 let mirror_down_addr = addr & 0b00100000_00000111;
@@ -80,6 +82,11 @@ impl Mem for Bus {
             0x2000 => {
                 self.ppu.write_to_ctrl(data);
             }
+            // TODO 0x2001 => Mask
+            // TODO 0x2002 => Status
+            // TODO 0x2003 => OAM Address
+            // TODO 0x2004 => OAM Data
+            // TODO 0x2005 => Scroll
             0x2006 => {
                 self.ppu.write_to_ppu_addr(data);
             }
@@ -90,6 +97,7 @@ impl Mem for Bus {
                 let mirror_down_addr = addr & 0b00100000_00000111;
                 self.mem_write(mirror_down_addr, data);
             }
+            // TODO 0x4014 => OAM DMA
             PRG_ROM..=PRG_ROM_END => {
                 panic!("Attempt to write to Cartrige ROM space")
             }

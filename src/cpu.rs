@@ -242,6 +242,7 @@ impl CPU {
                     callback(self);
                     call(self, &op);
 
+                    // TODO cycleの計算
                     self.bus.tick(op.cycles);
 
                     // if program_conter_state == self.program_counter {

@@ -10,10 +10,15 @@ pub struct NesPPU {
 
     pub mirroring: Mirroring,
 
-    addr: AddrRegister,
-    pub ctrl: ControlRegister,
+    addr: AddrRegister,        // 0x2006 (0x2007)
+    pub ctrl: ControlRegister, // 0x2000
     internal_data_buf: u8,
 
+    // TODO Mask 0x2001
+    // TODO Status 0x2002
+    // TODO OAM Address 0x2003, 0x2004
+    // TODO Scroll 0x2005
+    // TODO OAM DMA 0x4014
     cycles: usize,
     scanline: usize,
 }
@@ -38,8 +43,18 @@ impl NesPPU {
         self.addr.update(value);
     }
 
+    pub fn write_to_data(&mut self, value: u8) {
+        let addr = self.addr.get();
+        self.increment_vram_addr();
+        self.vram[self.mirror_vram_addr(addr) as usize] = value;
+    }
+
     pub fn write_to_ctrl(&mut self, value: u8) {
+        let before_nmi_status = self.ctrl.generate_vblank_nmi();
         self.ctrl.update(value);
+        if !before_nmi_status && self.ctrl.generate_vblank_nmi() && self.status.is_in_vblank() {
+            self.nmi_interrupt = Some(1);
+        }
     }
 
     fn increment_vram_addr(&mut self) {
@@ -92,7 +107,7 @@ impl NesPPU {
 
             if self.scanline == 241 {
                 if self.ctrl.generate_vblank_nmi() {
-                    self.status.set_vbrank_status(true);
+                    self.status.set_vblank_status(true);
                     todo!("Should trigger NMI interupt")
                 }
             }
