@@ -35,7 +35,7 @@ impl OpCode {
         code: u8,
         name: &str,
         bytes: u16,
-        cycles: u16,
+        cycles: u8,
         addressing_mode: AddressingMode,
     ) -> Self {
         OpCode {
@@ -71,7 +71,7 @@ pub struct CPU {
 }
 
 impl Mem for CPU {
-    fn mem_read(&self, addr: u16) -> u8 {
+    fn mem_read(&mut self, addr: u16) -> u8 {
         self.bus.mem_read(addr)
     }
 
@@ -94,7 +94,7 @@ impl CPU {
         }
     }
 
-    fn get_operand_address(&self, mode: &AddressingMode) -> u16 {
+    fn get_operand_address(&mut self, mode: &AddressingMode) -> u16 {
         match mode {
             AddressingMode::Implied => {
                 panic!("AddressingMode::Implied");
@@ -174,7 +174,7 @@ impl CPU {
         }
     }
 
-    pub fn mem_read_u16(&self, pos: u16) -> u16 {
+    pub fn mem_read_u16(&mut self, pos: u16) -> u16 {
         // FIXME
         if pos == 0xFF || pos == 0x02FF {
             let lo = self.mem_read(pos) as u16;
@@ -927,7 +927,7 @@ fn address(program_counter: u16, ops: &OpCode, args: &Vec<u8>) -> String {
     }
 }
 
-fn memory_access(cpu: &CPU, ops: &OpCode, args: &Vec<u8>) -> String {
+fn memory_access(cpu: &mut CPU, ops: &OpCode, args: &Vec<u8>) -> String {
     if ops.name.starts_with("J") {
         if ops.addressing_mode == AddressingMode::Indirect {
             let hi = args[1] as u16;

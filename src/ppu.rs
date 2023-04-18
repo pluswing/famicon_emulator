@@ -15,12 +15,16 @@ pub struct NesPPU {
     internal_data_buf: u8,
 
     // TODO Mask 0x2001
-    // TODO Status 0x2002
+
+    // Status 0x2002
+    status: StatusRegister,
+
     // TODO OAM Address 0x2003, 0x2004
     // TODO Scroll 0x2005
     // TODO OAM DMA 0x4014
     cycles: usize,
     scanline: usize,
+    pub nmi_interrupt: Option<i32>,
 }
 
 impl NesPPU {
@@ -33,9 +37,11 @@ impl NesPPU {
             palette_table: [0; 32],
             addr: AddrRegister::new(),
             ctrl: ControlRegister::new(),
+            status: StatusRegister::new(),
             internal_data_buf: 0,
             cycles: 0,
             scanline: 0,
+            nmi_interrupt: None,
         }
     }
 
@@ -202,5 +208,38 @@ impl ControlRegister {
     pub fn update(&mut self, data: u8) {
         // TODO 要確認
         *self.0.bits_mut() = data;
+    }
+
+    pub fn generate_vblank_nmi(&mut self) -> bool {
+        let lastStatus = self.contains(ControlRegister::GENERATE_NMI);
+        self.set(ControlRegister::GENERATE_NMI, true);
+        return lastStatus;
+    }
+}
+
+bitflags! {
+  pub struct StatusRegister: u8 {
+    const PPU_OPEN_BUS       = 0b0001_1111;
+    const SPRITE_OVERFLOW    = 0b0010_0000;
+    const SPRITE_ZERO_HIT    = 0b0100_0000;
+    const VBLANK_HAS_STARTED = 0b1000_0000;
+  }
+}
+
+impl StatusRegister {
+    pub fn new() -> Self {
+        StatusRegister::from_bits_truncate(0b0000_0000)
+    }
+
+    pub fn is_in_vblank(&mut self) -> bool {
+        self.contains(StatusRegister::VBLANK_HAS_STARTED)
+    }
+
+    pub fn set_vblank_status(&mut self, value: bool) {
+        self.set(StatusRegister::VBLANK_HAS_STARTED, value)
+    }
+
+    pub fn reset_vblank_status(&mut self) {
+        self.set_vblank_status(false)
     }
 }
