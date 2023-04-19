@@ -4,6 +4,7 @@ extern crate lazy_static;
 mod bus;
 mod cartridge;
 mod cpu;
+mod frame;
 mod opscodes;
 mod ppu;
 mod rom;

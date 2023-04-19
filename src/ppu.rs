@@ -211,9 +211,9 @@ impl ControlRegister {
     }
 
     pub fn generate_vblank_nmi(&mut self) -> bool {
-        let lastStatus = self.contains(ControlRegister::GENERATE_NMI);
+        let result = self.contains(ControlRegister::GENERATE_NMI);
         self.set(ControlRegister::GENERATE_NMI, true);
-        return lastStatus;
+        return result;
     }
 }
 
