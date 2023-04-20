@@ -1,3 +1,5 @@
+use crate::palette;
+
 pub struct Frame {
     pub data: Vec<u8>,
 }
@@ -22,7 +24,7 @@ impl Frame {
     }
 }
 
-fn show_tile(chr_rom: &Vec<u8>, bank: usize, tile_n: usize) -> Frame {
+pub fn show_tile(chr_rom: &Vec<u8>, bank: usize, tile_n: usize) -> Frame {
     assert!(bank <= 1);
 
     let mut frame = Frame::new();
@@ -35,11 +37,18 @@ fn show_tile(chr_rom: &Vec<u8>, bank: usize, tile_n: usize) -> Frame {
         let mut lower = tile[y + 8];
 
         for x in (0..=7).rev() {
-          let value = (1 & upper) << 1 | (1 & lower);
-          upper = upper >> 1;
-          lower = lower >> 1;
-          let rgb = match value {
-          }
+            let value = (1 & upper) << 1 | (1 & lower);
+            upper = upper >> 1;
+            lower = lower >> 1;
+            let rgb = match value {
+                0 => palette::SYSTEM_PALLETE[0x01],
+                1 => palette::SYSTEM_PALLETE[0x23],
+                2 => palette::SYSTEM_PALLETE[0x27],
+                3 => palette::SYSTEM_PALLETE[0x30],
+                _ => panic!("can't be"),
+            };
+            frame.set_pixel(x, y, rgb)
         }
     }
+    frame
 }

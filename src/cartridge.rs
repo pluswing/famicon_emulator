@@ -21,4 +21,12 @@ pub mod test {
     pub fn test_rom() -> Rom {
         load_rom("rom/nestest.nes")
     }
+
+    pub fn mario_rom() -> Rom {
+        load_rom("rom/Super Mario Bros. (World).nes")
+    }
+
+    pub fn alter_ego_rom() -> Rom {
+        load_rom("rom/Alter_Ego.nes")
+    }
 }
