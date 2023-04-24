@@ -8,6 +8,7 @@ mod frame;
 mod opscodes;
 mod palette;
 mod ppu;
+mod render;
 mod rom;
 
 use crate::cpu::trace;
@@ -15,7 +16,7 @@ use crate::cpu::trace;
 use self::bus::{Bus, Mem};
 use self::cpu::CPU;
 
-use cartridge::test::{alter_ego_rom, test_rom};
+use cartridge::test::{alter_ego_rom, mario_rom, test_rom};
 use frame::show_tile;
 use rand::Rng;
 use sdl2::event::Event;
@@ -25,7 +26,7 @@ use sdl2::pixels::PixelFormatEnum;
 use sdl2::EventPump;
 
 fn main() {
-    let rom = alter_ego_rom();
+    let rom = mario_rom();
     //let bus = Bus::new(rom);
     //let mut cpu = CPU::new(bus);
 
@@ -48,7 +49,7 @@ fn main() {
         .unwrap();
 
     // put CHR_ROM
-    let tile_frame = show_tile(&rom.chr_rom, 1, 130);
+    let tile_frame = show_tile(&rom.chr_rom, 1, 64);
     texture.update(None, &tile_frame.data, 256 * 3).unwrap();
     canvas.copy(&texture, None, None).unwrap();
     canvas.present();
