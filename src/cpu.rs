@@ -59,7 +59,7 @@ const FLAG_NEGATIVE: u8 = 1 << 7;
 
 const SIGN_BIT: u8 = 1 << 7;
 
-pub struct CPU {
+pub struct CPU<'a> {
     pub register_a: u8,
     pub register_x: u8,
     pub register_y: u8,
@@ -67,10 +67,10 @@ pub struct CPU {
     pub program_counter: u16,
     pub stack_pointer: u8,
     // pub memory: [u8; 0x10000], // 0xFFFF
-    pub bus: Bus,
+    pub bus: Bus<'a>,
 }
 
-impl Mem for CPU {
+impl Mem for CPU<'_> {
     fn mem_read(&mut self, addr: u16) -> u8 {
         self.bus.mem_read(addr)
     }
@@ -1010,10 +1010,11 @@ mod test {
     use super::*;
     use crate::bus::Bus;
     use crate::cartridge::test::test_rom;
+    use crate::ppu::NesPPU;
 
     #[test]
     fn test_format_trace() {
-        let mut bus = Bus::new(test_rom());
+        let mut bus = Bus::new(test_rom(), move |ppu: &NesPPU| {});
         bus.mem_write(100, 0xa2);
         bus.mem_write(101, 0x01);
         bus.mem_write(102, 0xca);
@@ -1047,7 +1048,7 @@ mod test {
 
     #[test]
     fn test_format_mem_access() {
-        let mut bus = Bus::new(test_rom());
+        let mut bus = Bus::new(test_rom(), move |ppu: &NesPPU| {});
         // ORA ($33), Y
         bus.mem_write(100, 0x11);
         bus.mem_write(101, 0x33);

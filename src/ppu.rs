@@ -215,6 +215,14 @@ impl ControlRegister {
         self.set(ControlRegister::GENERATE_NMI, true);
         return result;
     }
+
+    pub fn bknd_pattern_addr(&self) -> u16 {
+        if !self.contains(ControlRegister::BACKGROUND_PATTERN_ADDR) {
+            0x0000
+        } else {
+            0x1000
+        }
+    }
 }
 
 bitflags! {
