@@ -114,13 +114,16 @@ impl NesPPU {
             if self.scanline == 241 {
                 if self.ctrl.generate_vblank_nmi() {
                     self.status.set_vblank_status(true);
-                    todo!("Should trigger NMI interupt")
+                    // todo!("Should trigger NMI interupt")
+                    self.nmi_interrupt = Some(1);
                 }
             }
 
             if self.scanline >= 262 {
                 self.scanline = 0;
                 self.status.reset_vblank_status();
+                // FIXME ...
+                self.nmi_interrupt = None;
                 return true;
             }
         }

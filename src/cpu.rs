@@ -80,8 +80,8 @@ impl Mem for CPU<'_> {
     }
 }
 
-impl CPU {
-    pub fn new(bus: Bus) -> Self {
+impl<'a> CPU<'a> {
+    pub fn new(bus: Bus<'a>) -> CPU<'a> {
         CPU {
             register_a: 0,
             register_x: 0,
@@ -209,7 +209,7 @@ impl CPU {
 
         self.program_counter = self.mem_read_u16(0xFFFC);
         // FIXME FOR TEST
-        self.program_counter = 0xC000;
+        // self.program_counter = 0xC000;
     }
 
     pub fn load(&mut self) {
@@ -264,6 +264,7 @@ impl CPU {
         self.status = self.status | FLAG_INTERRRUPT;
         self.bus.tick(2);
         self.program_counter = self.mem_read_u16(0xFFFA);
+        println!("** interrupt_nmi {:X}", self.program_counter);
     }
 
     fn find_ops(&mut self, opscode: u8) -> Option<OpCode> {

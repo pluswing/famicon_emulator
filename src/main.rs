@@ -30,13 +30,13 @@ fn main() {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
-        .window("Snake game", (32.0 * 10.0) as u32, (32.0 * 10.0) as u32)
+        .window("NES Emulator", (256.0 * 2.0) as u32, (240.0 * 2.0) as u32)
         .position_centered()
         .build()
         .unwrap();
     let mut canvas = window.into_canvas().present_vsync().build().unwrap();
     let mut event_pump = sdl_context.event_pump().unwrap();
-    canvas.set_scale(10.0, 10.0).unwrap();
+    canvas.set_scale(2.0, 2.0).unwrap();
 
     let creator = canvas.texture_creator();
     let mut texture = creator
@@ -46,6 +46,7 @@ fn main() {
     let rom = mario_rom();
     let mut frame = Frame::new();
     let bus = Bus::new(rom, move |ppu: &NesPPU| {
+        println!("** GAME LOOP **");
         render::render(ppu, &mut frame);
         texture.update(None, &frame.data, 256 * 3).unwrap();
 
@@ -67,7 +68,9 @@ fn main() {
     let mut cpu = CPU::new(bus);
 
     cpu.reset();
-    cpu.run();
+    cpu.run_with_callback(move |cpu| {
+        // println!("{}", trace(cpu));
+    });
 
     /*
        // put CHR_ROM
