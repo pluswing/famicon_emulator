@@ -47,7 +47,9 @@ impl<'a> Bus<'a> {
     }
 
     pub fn poll_nmi_status(&mut self) -> Option<i32> {
-        self.ppu.nmi_interrupt
+        let res = self.ppu.nmi_interrupt;
+        self.ppu.nmi_interrupt = None;
+        res
     }
 }
 
