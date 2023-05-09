@@ -74,9 +74,12 @@ const fetchUnofficialOps = async () => {
       const mode = keyMap[s[0]]
       const code = s[2].replace("$", "")
       const bytes = s[3]
-      const comment = s[4].match(/\*/) ? " /* (+ some cycles) */" : ""
+      let cmode = "None"
+      if (s[4].match(/\*/)) {
+        cmode = "Page"
+      }
       const cycles = s[4].replace(/ |\*/g, "").replace("-", "0")
-      return `OpCode::new(0x${code}, "*${name}", ${bytes}, ${cycles}${comment}, AddressingMode::${mode}),`
+      return `OpCode::new(0x${code}, "*${name}", ${bytes}, ${cycles}, CycleCalcMode::${cmode}, AddressingMode::${mode}),`
     });
   }).flat();
   return [defs.map((v) => v[0]), codes];
@@ -125,8 +128,13 @@ const main = async () => {
 
   const opcodes = zip(opsNames, psEffects, amVariations).map(([name, effects, variations]) => {
     return variations.map((v) => {
-      const comment = v.cyclesComment ? ` /* ${v.cyclesComment} */` : ""
-      return `OpCode::new(0x${v.opcode}, "${name}", ${v.bytes}, ${v.cycles}${comment}, AddressingMode::${v.mode}),`
+      let mode = "None"
+      if (v.cyclesComment == "(+1 if page crossed)") {
+        mode = "Page"
+      } else if (v.cyclesComment) {
+        mode = "Branch"
+      }
+      return `OpCode::new(0x${v.opcode}, "${name}", ${v.bytes}, ${v.cycles}, CycleCalcMode::${mode}, AddressingMode::${v.mode}),`
     })
   }).flat().join("\n")
 
@@ -140,9 +148,7 @@ const main = async () => {
   })
 
   const header = `
-use crate::cpu::AddressingMode;
-use crate::cpu::OpCode;
-use crate::cpu::CPU;
+use crate::cpu::{AddressingMode, CycleCalcMode, OpCode, CPU};
 `.trim()
 
   const code = `

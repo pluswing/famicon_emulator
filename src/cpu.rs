@@ -21,12 +21,21 @@ pub enum AddressingMode {
     NoneAddressing,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+#[allow(non_camel_case_types)]
+pub enum CycleCalcMode {
+    None,
+    Page,
+    Branch,
+}
+
 #[derive(Debug, Clone)]
 pub struct OpCode {
     pub code: u8,
     pub name: String,
     pub bytes: u16,
     pub cycles: u8,
+    pub cycle_calc_mode: CycleCalcMode,
     pub addressing_mode: AddressingMode,
 }
 
@@ -36,6 +45,7 @@ impl OpCode {
         name: &str,
         bytes: u16,
         cycles: u8,
+        cycle_calc_mode: CycleCalcMode,
         addressing_mode: AddressingMode,
     ) -> Self {
         OpCode {
@@ -43,6 +53,7 @@ impl OpCode {
             name: String::from(name),
             bytes: bytes,
             cycles: cycles,
+            cycle_calc_mode: cycle_calc_mode,
             addressing_mode: addressing_mode,
         }
     }
@@ -239,11 +250,43 @@ impl<'a> CPU<'a> {
                     if op.name == "BRK" {
                         return;
                     }
+
+                    let add_cycles = match op.cycle_calc_mode {
+                        CycleCalcMode::None => 0,
+                        CycleCalcMode::Page => {
+                            // (+1 if page crossed)
+                            match op.addressing_mode {
+                                AddressingMode::Absolute_X | AddressingMode::Absolute_Y => {
+                                    let lo = self.mem_read(self.program_counter);
+                                    if lo == 0xFF {
+                                        1
+                                    } else {
+                                        0
+                                    }
+                                }
+                                AddressingMode::Indirect_Y => {
+                                    let base = self.mem_read(self.program_counter);
+                                    let lo = self.mem_read(base as u16);
+                                    if lo == 0xFF {
+                                        1
+                                    } else {
+                                        0
+                                    }
+                                }
+                                _ => panic!(""),
+                            }
+                        }
+                        CycleCalcMode::Branch => {
+                            // (+1 if branch succeeds
+                            //  +2 if to a new page)
+                            0
+                        }
+                    };
+
                     callback(self);
                     call(self, &op);
 
-                    // TODO cycleの計算
-                    self.bus.tick(op.cycles);
+                    self.bus.tick(op.cycles + add_cycles);
 
                     // if program_conter_state == self.program_counter {
                     //   self.program_counter += (op.len - 1) as u16
