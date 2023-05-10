@@ -43,7 +43,7 @@ fn main() {
         .create_texture_target(PixelFormatEnum::RGB24, 256, 240)
         .unwrap();
 
-    let rom = mario_rom();
+    let rom = alter_ego_rom();
     let mut frame = Frame::new();
     let bus = Bus::new(rom, move |ppu: &NesPPU| {
         println!("** GAME LOOP **");

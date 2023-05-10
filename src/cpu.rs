@@ -79,6 +79,8 @@ pub struct CPU<'a> {
     pub stack_pointer: u8,
     // pub memory: [u8; 0x10000], // 0xFFFF
     pub bus: Bus<'a>,
+
+    add_cycles: u8,
 }
 
 impl Mem for CPU<'_> {
@@ -102,6 +104,7 @@ impl<'a> CPU<'a> {
             stack_pointer: 0xFD, // FIXME あってる？
             // memory: [0x00; 0x10000],
             bus: bus,
+            add_cycles: 0,
         }
     }
 
@@ -140,6 +143,10 @@ impl<'a> CPU<'a> {
             AddressingMode::Absolute_X => {
                 let base = self.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_x as u16);
+                // (+1 if page crossed)
+                if base & 0xFF00 != addr & 0xFF00 {
+                    self.add_cycles += 1;
+                }
                 addr
             }
 
@@ -147,6 +154,10 @@ impl<'a> CPU<'a> {
             AddressingMode::Absolute_Y => {
                 let base = self.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_y as u16);
+                // (+1 if page crossed)
+                if base & 0xFF00 != addr & 0xFF00 {
+                    self.add_cycles += 1;
+                }
                 addr
             }
             // JMP -> same Absolute
@@ -169,6 +180,10 @@ impl<'a> CPU<'a> {
                 let base = self.mem_read(self.program_counter);
                 let deref_base = self.mem_read_u16(base as u16);
                 let deref = deref_base.wrapping_add(self.register_y as u16);
+                // (+1 if page crossed)
+                if deref_base & 0xFF00 != deref & 0xFF00 {
+                    self.add_cycles += 1;
+                }
                 deref
             }
 
@@ -247,46 +262,29 @@ impl<'a> CPU<'a> {
             match op {
                 Some(op) => {
                     // FIXME FOR TEST
-                    if op.name == "BRK" {
-                        return;
-                    }
-
-                    let add_cycles = match op.cycle_calc_mode {
-                        CycleCalcMode::None => 0,
-                        CycleCalcMode::Page => {
-                            // (+1 if page crossed)
-                            match op.addressing_mode {
-                                AddressingMode::Absolute_X | AddressingMode::Absolute_Y => {
-                                    let lo = self.mem_read(self.program_counter);
-                                    if lo == 0xFF {
-                                        1
-                                    } else {
-                                        0
-                                    }
-                                }
-                                AddressingMode::Indirect_Y => {
-                                    let base = self.mem_read(self.program_counter);
-                                    let lo = self.mem_read(base as u16);
-                                    if lo == 0xFF {
-                                        1
-                                    } else {
-                                        0
-                                    }
-                                }
-                                _ => panic!(""),
-                            }
-                        }
-                        CycleCalcMode::Branch => {
-                            // (+1 if branch succeeds
-                            //  +2 if to a new page)
-                            0
-                        }
-                    };
+                    // if op.name == "BRK" {
+                    //     return;
+                    // }
+                    self.add_cycles = 0;
 
                     callback(self);
                     call(self, &op);
 
-                    self.bus.tick(op.cycles + add_cycles);
+                    match op.cycle_calc_mode {
+                        CycleCalcMode::None => {
+                            if self.add_cycles != 0 {
+                                panic!("想定外: cycle_calc")
+                            }
+                        }
+                        CycleCalcMode::Page => {
+                            if self.add_cycles > 1 {
+                                panic!("想定外: cycle_calc")
+                            }
+                        }
+                        _ => {}
+                    }
+
+                    self.bus.tick(op.cycles + self.add_cycles);
 
                     // if program_conter_state == self.program_counter {
                     //   self.program_counter += (op.len - 1) as u16
@@ -610,10 +608,22 @@ impl<'a> CPU<'a> {
         let addr = self.get_operand_address(mode);
         if nonzero {
             if self.status & flag != 0 {
+                // (+1 if branch succeeds
+                //  +2 if to a new page)
+                self.add_cycles += 1;
+                if self.program_counter & 0xFF00 != addr & 0xFF00 {
+                    self.add_cycles += 2;
+                }
                 self.program_counter = addr
             }
         } else {
             if self.status & flag == 0 {
+                // (+1 if branch succeeds
+                //  +2 if to a new page)
+                self.add_cycles += 1;
+                if self.program_counter & 0xFF00 != addr & 0xFF00 {
+                    self.add_cycles += 2;
+                }
                 self.program_counter = addr
             }
         }
@@ -621,9 +631,8 @@ impl<'a> CPU<'a> {
 
     pub fn brk(&mut self, mode: &AddressingMode) {
         // プログラム カウンターとプロセッサ ステータスがスタックにプッシュされ、
-        //   ==> ??? FIXME
-        // self._push_u16(self.program_counter);
-        // self._push(self.status);
+        self._push_u16(self.program_counter);
+        self._push(self.status);
 
         // $FFFE/F の IRQ 割り込みベクトルが PC にロードされ、ステータスのブレーク フラグが 1 に設定されます。
         self.program_counter = self.mem_read_u16(0xFFFE);

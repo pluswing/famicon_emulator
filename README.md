@@ -40,10 +40,10 @@ https://www.youtube.com/playlist?list=PLp_EUEO9JJP1cMwbqzOHFOI9gPH_zoO0U
 
 TODO
 ```
-- cyclesの計算
+- cyclesの計算 => OK
+- ppu write_to_dataをちゃんと実装する => OK
+- brk命令の復活 => 0K
 - CPU命令の未実装
-- brk命令の復活
-- ppu write_to_dataをちゃんと実装する
 - ppu 未実装
   - mask
   - oam
