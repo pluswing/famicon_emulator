@@ -272,13 +272,14 @@ impl<'a> CPU<'a> {
 
                     match op.cycle_calc_mode {
                         CycleCalcMode::None => {
-                            if self.add_cycles != 0 {
-                                panic!("想定外: cycle_calc")
-                            }
+                            self.add_cycles = 0;
                         }
                         CycleCalcMode::Page => {
                             if self.add_cycles > 1 {
-                                panic!("想定外: cycle_calc")
+                                panic!(
+                                    "Unexpected cycle_calc. {} {:?} => {}",
+                                    op.name, op.addressing_mode, self.add_cycles
+                                )
                             }
                         }
                         _ => {}
@@ -305,7 +306,6 @@ impl<'a> CPU<'a> {
         self.status = self.status | FLAG_INTERRRUPT;
         self.bus.tick(2);
         self.program_counter = self.mem_read_u16(0xFFFA);
-        println!("** interrupt_nmi {:X}", self.program_counter);
     }
 
     fn find_ops(&mut self, opscode: u8) -> Option<OpCode> {

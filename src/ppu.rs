@@ -55,19 +55,13 @@ impl NesPPU {
 
         match addr {
             0..=0x1FFF => {
-                panic!(
-                    "addr space 0x0000..0x1FFF is not expected to be used, requested = {:X} ",
-                    addr,
-                )
+                // FIXME
             }
             0x2000..=0x2FFF => {
                 self.vram[self.mirror_vram_addr(addr) as usize] = value;
             }
             0x3000..=0x3EFF => {
-                panic!(
-                    "addr space 0x3000..0x3EFF is not expected to be used, requested = {:X} ",
-                    addr,
-                )
+                // FIXME
             }
             0x3F00..=0x3FFF => {
                 self.palette_table[(addr - 0x3F00) as usize] = value;
@@ -82,6 +76,14 @@ impl NesPPU {
         if !before_nmi_status && self.ctrl.generate_vblank_nmi() && self.status.is_in_vblank() {
             self.nmi_interrupt = Some(1);
         }
+    }
+
+    pub fn read_status(&self) -> u8 {
+        self.status.bits()
+    }
+
+    pub fn write_to_status(&mut self, value: u8) {
+        self.status.update(value);
     }
 
     fn increment_vram_addr(&mut self) {
@@ -273,5 +275,10 @@ impl StatusRegister {
 
     pub fn reset_vblank_status(&mut self) {
         self.set_vblank_status(false)
+    }
+
+    pub fn update(&mut self, data: u8) {
+        // TODO 要確認
+        *self.0.bits_mut() = data;
     }
 }
