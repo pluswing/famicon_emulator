@@ -43,7 +43,7 @@ TODO
 - cyclesの計算 => OK
 - ppu write_to_dataをちゃんと実装する => OK
 - brk命令の復活 => 0K
-- CPU命令の未実装
+- CPU命令の未実装 => とりまOK
 - ppu 未実装
   - mask
   - oam

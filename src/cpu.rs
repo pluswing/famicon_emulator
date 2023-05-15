@@ -317,18 +317,82 @@ impl<'a> CPU<'a> {
         return None;
     }
 
-    pub fn anc(&mut self, mode: &AddressingMode) {}
-    pub fn arr(&mut self, mode: &AddressingMode) {}
-    pub fn asr(&mut self, mode: &AddressingMode) {}
-    pub fn lxa(&mut self, mode: &AddressingMode) {}
-    pub fn sha(&mut self, mode: &AddressingMode) {}
-    pub fn sbx(&mut self, mode: &AddressingMode) {}
-    pub fn jam(&mut self, mode: &AddressingMode) {}
-    pub fn lae(&mut self, mode: &AddressingMode) {}
-    pub fn shx(&mut self, mode: &AddressingMode) {}
-    pub fn shy(&mut self, mode: &AddressingMode) {}
-    pub fn ane(&mut self, mode: &AddressingMode) {}
-    pub fn shs(&mut self, mode: &AddressingMode) {}
+    pub fn anc(&mut self, mode: &AddressingMode) {
+        todo!("anc")
+    }
+    pub fn arr(&mut self, mode: &AddressingMode) {
+        todo!("arr")
+    }
+    pub fn asr(&mut self, mode: &AddressingMode) {
+        todo!("asr")
+    }
+    pub fn lxa(&mut self, mode: &AddressingMode) {
+        todo!("lxa")
+    }
+    pub fn sha(&mut self, mode: &AddressingMode) {
+        todo!("sha")
+    }
+    pub fn sbx(&mut self, mode: &AddressingMode) {
+        //  A&X minus #{imm} into X
+        // AND X register with accumulator and store result in X regis-ter, then
+        // subtract byte from X register (without borrow).
+        // Status flags: N,Z,C
+
+        // AND X をアキュムレータに登録し、結果を X レジスタに格納します。 X レジスタからバイトを減算します (ボローなし)。 ステータスフラグ：N、Z、C
+        todo!("sbx")
+    }
+
+    pub fn jam(&mut self, mode: &AddressingMode) {
+        // Stop program counter (processor lock up).
+        self.program_counter -= 1;
+        panic!("CALL JAM operation.");
+    }
+
+    pub fn lae(&mut self, mode: &AddressingMode) {
+        // stores {adr}&S into A, X and S
+
+        // AND memory with stack pointer, transfer result to accu-mulator, X
+        // register and stack pointer.
+        // Status flags: N,Z
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        let s = self._pop();
+        self.register_a = value & s;
+        self.register_x = self.register_a;
+        self._push(self.register_a);
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
+    pub fn shx(&mut self, mode: &AddressingMode) {
+        // M =3D X AND HIGH(arg) + 1
+        let addr = self.get_operand_address(mode);
+        let h = ((addr & 0xFF00) >> 8) as u8;
+        self.mem_write(addr, (self.register_x & h).wrapping_add(1));
+    }
+
+    pub fn shy(&mut self, mode: &AddressingMode) {
+        // Y&H into {adr}
+        // AND Y register with the high byte of the target address of the argument
+        // + 1. Store the result in memory.
+        let addr = self.get_operand_address(mode);
+        let h = ((addr & 0xFF00) >> 8) as u8;
+        self.mem_write(addr, (self.register_y & h).wrapping_add(1));
+    }
+
+    pub fn ane(&mut self, mode: &AddressingMode) {
+        // TXA + AND #{imm}
+        self.txa(mode);
+        self.and(mode);
+    }
+
+    pub fn shs(&mut self, mode: &AddressingMode) {
+        // stores A&X into S and A&X&H into {adr}
+        // アキュムレータと X レジスタを AND 演算し、結果をスタック ポインタに格納します。次に、スタック ポインタと引数 1 のターゲット アドレスの上位バイトを AND 演算します。結果をメモリに格納します。
+        self._push(self.register_a & self.register_x);
+        let addr = self.get_operand_address(mode);
+        let h = ((addr & 0xFF00) >> 8) as u8;
+        self.mem_write(addr, self.register_a & self.register_x & h);
+    }
 
     pub fn rra(&mut self, mode: &AddressingMode) {
         self.ror(mode);
