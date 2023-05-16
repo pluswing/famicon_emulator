@@ -339,6 +339,16 @@ impl<'a> CPU<'a> {
         // Status flags: N,Z,C
 
         // AND X をアキュムレータに登録し、結果を X レジスタに格納します。 X レジスタからバイトを減算します (ボローなし)。 ステータスフラグ：N、Z、C
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        let (v, overflow) = (self.register_a & self.register_x).overflowing_sub(value);
+        self.register_x = v;
+        self.update_zero_and_negative_flags(self.register_x);
+        self.status = if overflow {
+            self.status & FLAG_OVERFLOW
+        } else {
+            self.status | FLAG_OVERFLOW
+        };
         todo!("sbx")
     }
 
@@ -361,6 +371,7 @@ impl<'a> CPU<'a> {
         self.register_x = self.register_a;
         self._push(self.register_a);
         self.update_zero_and_negative_flags(self.register_a);
+        todo!("lae")
     }
 
     pub fn shx(&mut self, mode: &AddressingMode) {
@@ -368,6 +379,7 @@ impl<'a> CPU<'a> {
         let addr = self.get_operand_address(mode);
         let h = ((addr & 0xFF00) >> 8) as u8;
         self.mem_write(addr, (self.register_x & h).wrapping_add(1));
+        todo!("shx")
     }
 
     pub fn shy(&mut self, mode: &AddressingMode) {
@@ -377,12 +389,14 @@ impl<'a> CPU<'a> {
         let addr = self.get_operand_address(mode);
         let h = ((addr & 0xFF00) >> 8) as u8;
         self.mem_write(addr, (self.register_y & h).wrapping_add(1));
+        todo!("shy")
     }
 
     pub fn ane(&mut self, mode: &AddressingMode) {
         // TXA + AND #{imm}
         self.txa(mode);
         self.and(mode);
+        todo!("ane")
     }
 
     pub fn shs(&mut self, mode: &AddressingMode) {
@@ -392,6 +406,7 @@ impl<'a> CPU<'a> {
         let addr = self.get_operand_address(mode);
         let h = ((addr & 0xFF00) >> 8) as u8;
         self.mem_write(addr, self.register_a & self.register_x & h);
+        todo!("shs")
     }
 
     pub fn rra(&mut self, mode: &AddressingMode) {

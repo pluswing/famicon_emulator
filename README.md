@@ -45,8 +45,9 @@ TODO
 - brk命令の復活 => 0K
 - CPU命令の未実装 => とりまOK
 - ppu 未実装
-  - mask
-  - oam
+  - mask => OK
+  - oam => OK
+  - OAM DMA
   - scroll (あとでOK)
 - NMIまわり => OK
 ```

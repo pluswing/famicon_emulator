@@ -6,6 +6,8 @@ pub struct NesPPU {
     pub chr_rom: Vec<u8>,
     pub palette_table: [u8; 32],
     pub vram: [u8; 2048],
+
+    pub oam_addr: usize,
     pub oam_data: [u8; 256],
 
     pub mirroring: Mirroring,
@@ -15,6 +17,7 @@ pub struct NesPPU {
     internal_data_buf: u8,
 
     // TODO Mask 0x2001
+    mask: MaskRegister,
 
     // Status 0x2002
     status: StatusRegister,
@@ -34,10 +37,12 @@ impl NesPPU {
             mirroring: mirroring,
             vram: [0; 2048],
             oam_data: [0; 64 * 4],
+            oam_addr: 0,
             palette_table: [0; 32],
             addr: AddrRegister::new(),
             ctrl: ControlRegister::new(),
             status: StatusRegister::new(),
+            mask: MaskRegister::new(),
             internal_data_buf: 0,
             cycles: 0,
             scanline: 0,
@@ -84,6 +89,23 @@ impl NesPPU {
 
     pub fn write_to_status(&mut self, value: u8) {
         self.status.update(value);
+    }
+
+    pub fn write_to_mask(&mut self, value: u8) {
+        self.mask.update(value);
+    }
+
+    pub fn write_to_oam_addr(&mut self, value: u8) {
+        self.oam_addr = value as usize;
+    }
+
+    pub fn write_to_oam_data(&mut self, value: u8) {
+        self.oam_data[self.oam_addr] = value;
+    }
+
+    pub fn read_oam_data(&self) {
+        self.oam_data[self.oam_addr];
+        self.oam_addr = self.oam_addr.wrapping_add(1)
     }
 
     fn increment_vram_addr(&mut self) {
@@ -148,6 +170,11 @@ impl NesPPU {
                 // FIXME ...
                 self.nmi_interrupt = None;
                 return true;
+            }
+
+            if self.scanline == 257 {
+                // OAMADDR は、プリレンダリングおよび表示可能なスキャンラインのティック 257 ～ 320 (スプライト タイルの読み込み間隔) のそれぞれの間に 0 に設定されます。
+                self.oam_addr = 0;
             }
         }
         return false;
@@ -275,6 +302,30 @@ impl StatusRegister {
 
     pub fn reset_vblank_status(&mut self) {
         self.set_vblank_status(false)
+    }
+
+    pub fn update(&mut self, data: u8) {
+        // TODO 要確認
+        *self.0.bits_mut() = data;
+    }
+}
+
+bitflags! {
+  pub struct MaskRegister: u8 {
+    const GREYSCALE               = 0b0000_0001;
+    const SHOW_BACKGROUND_IN_LEFT = 0b0000_0010;
+    const SHOW_SPRITES_IN_LEFT    = 0b0000_0100;
+    const SHOW_BACKGROUND         = 0b0000_1000;
+    const SHOW_SPRITES            = 0b0001_0000;
+    const EMPHASIZE_RED           = 0b0010_0000;
+    const EMPHASIZE_GREEN         = 0b0100_0000;
+    const EMPHASIZE_BLUE          = 0b1000_0000;
+  }
+}
+
+impl MaskRegister {
+    pub fn new() -> Self {
+        MaskRegister::from_bits_truncate(0b0000_0000)
     }
 
     pub fn update(&mut self, data: u8) {
