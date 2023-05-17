@@ -7,7 +7,7 @@ pub struct NesPPU {
     pub palette_table: [u8; 32],
     pub vram: [u8; 2048],
 
-    pub oam_addr: usize,
+    pub oam_addr: u8,
     pub oam_data: [u8; 256],
 
     pub mirroring: Mirroring,
@@ -96,16 +96,20 @@ impl NesPPU {
     }
 
     pub fn write_to_oam_addr(&mut self, value: u8) {
-        self.oam_addr = value as usize;
+        self.oam_addr = value;
     }
 
     pub fn write_to_oam_data(&mut self, value: u8) {
-        self.oam_data[self.oam_addr] = value;
+        self.oam_data[self.oam_addr as usize] = value;
+        self.oam_addr = self.oam_addr.wrapping_add(1)
     }
 
-    pub fn read_oam_data(&self) {
-        self.oam_data[self.oam_addr];
-        self.oam_addr = self.oam_addr.wrapping_add(1)
+    pub fn read_oam_data(&self) -> u8 {
+        self.oam_data[self.oam_addr as usize]
+    }
+
+    pub fn write_to_oam_dma(&mut self, values: [u8; 256]) {
+        self.oam_data = values;
     }
 
     fn increment_vram_addr(&mut self) {
