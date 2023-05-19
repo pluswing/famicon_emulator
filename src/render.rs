@@ -33,6 +33,7 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
     }
 
     // draw sprites
+    // TODO 8x16 mode
     for i in (0..ppu.oam_data.len()).step_by(4).rev() {
         let tile_y = ppu.oam_data[i] as usize;
         let tile_idx = ppu.oam_data[i + 1] as u16;

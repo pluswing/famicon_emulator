@@ -287,9 +287,7 @@ impl ControlRegister {
 
     pub fn sprt_pattern_addr(&self) -> u16 {
         // ignored in 8x16 mode
-        if self.is_sprt_8x16_mode() {
-            return 0x0000;
-        }
+
         if !self.contains(ControlRegister::SPRITE_PATTERN_ADDR) {
             0x0000
         } else {

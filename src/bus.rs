@@ -1,3 +1,4 @@
+use crate::joypad::Joypad;
 use crate::ppu::NesPPU;
 use crate::rom::Rom;
 
@@ -5,21 +6,23 @@ pub struct Bus<'call> {
     cpu_vram: [u8; 2048],
     prg_rom: Vec<u8>,
     ppu: NesPPU,
+    joypad1: Joypad,
 
     cycles: usize,
-    gameloop_callback: Box<dyn FnMut(&NesPPU) + 'call>,
+    gameloop_callback: Box<dyn FnMut(&NesPPU, &mut Joypad) + 'call>,
 }
 
 impl<'a> Bus<'a> {
     pub fn new<'call, F>(rom: Rom, gameloop_callback: F) -> Bus<'call>
     where
-        F: FnMut(&NesPPU) + 'call,
+        F: FnMut(&NesPPU, &mut Joypad) + 'call,
     {
         let ppu = NesPPU::new(rom.chr_rom, rom.screen_mirroring);
         Bus {
             cpu_vram: [0; 2048],
             prg_rom: rom.prg_rom,
             ppu: ppu,
+            joypad1: Joypad::new(),
             cycles: 0,
             gameloop_callback: Box::from(gameloop_callback),
         }
@@ -42,7 +45,7 @@ impl<'a> Bus<'a> {
         let nmi_after = self.ppu.nmi_interrupt.is_some();
 
         if !nmi_before && nmi_after {
-            (self.gameloop_callback)(&self.ppu /*, &mut self.joypad1 */);
+            (self.gameloop_callback)(&self.ppu, &mut self.joypad1);
         }
     }
 
@@ -83,10 +86,7 @@ impl Mem for Bus<'_> {
                 let mirror_down_addr = addr & 0b00100000_00000111;
                 self.mem_read(mirror_down_addr)
             }
-            0x4016 => {
-                // TODO JOYPAD
-                0
-            }
+            0x4016 => self.joypad1.read(),
             PRG_ROM..=PRG_ROM_END => self.read_prg_rom(addr),
             _ => {
                 println!("Ignoreing mem access at {:X}", addr);
@@ -144,7 +144,7 @@ impl Mem for Bus<'_> {
                 // TODO DMCch
             }
             0x4016 => {
-                // TODO JOYPAD
+                self.joypad1.write(data);
             }
             0x4014 => {
                 // $XX を書き込むと、256 バイトのデータが CPU ページ $XX00 ～ $XXFF から内部 PPU OAM にアップロードされます。このページは通常、内部 RAM (通常は $0200 ～ $02FF) にありますが、カートリッジ RAM または ROM も使用できます。
