@@ -27,6 +27,7 @@ use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::EventPump;
+use std::collections::HashMap;
 
 fn main() {
     let sdl_context = sdl2::init().unwrap();

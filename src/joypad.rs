@@ -1,6 +1,7 @@
 use bitflags::bitflags;
 
 bitflags! {
+  #[derive(Debug, Clone, Copy, PartialEq)]
   pub struct JoypadButton: u8 {
     const RIGHT      = 0b1000_0000;
     const LEFT       = 0b0100_0000;
@@ -47,5 +48,7 @@ impl Joypad {
         response
     }
 
-    // TODO joypad.set_button_pressed_status
+    pub fn set_button_pressed_status(&mut self, button: JoypadButton, value: bool) {
+        self.button_status.set(button, value)
+    }
 }
