@@ -157,7 +157,7 @@ impl NesPPU {
     pub fn tick(&mut self, cycles: u8) -> bool {
         self.cycles += cycles as usize;
         if self.cycles >= 341 {
-            if self.is_sprite_0_hit(self.cycles) {
+            if self.is_sprite_zero_hit(self.cycles) {
                 self.status.set_sprite_zero_hit(true);
             }
 
@@ -190,7 +190,7 @@ impl NesPPU {
         return false;
     }
 
-    fn is_sprite_0_hit(&self, cycle: usize) -> bool {
+    fn is_sprite_zero_hit(&self, cycle: usize) -> bool {
         let y = self.oam_data[0] as usize;
         let x = self.oam_data[3] as usize;
         (y == self.scanline as usize) && x <= cycle && self.mask.show_sprites()
@@ -284,7 +284,7 @@ impl ControlRegister {
         return result;
     }
 
-    pub fn bknd_pattern_addr(&self) -> u16 {
+    pub fn background_pattern_addr(&self) -> u16 {
         if !self.contains(ControlRegister::BACKGROUND_PATTERN_ADDR) {
             0x0000
         } else {
@@ -292,11 +292,11 @@ impl ControlRegister {
         }
     }
 
-    pub fn is_sprt_8x16_mode(&self) -> bool {
+    pub fn is_sprite_8x16_mode(&self) -> bool {
         self.contains(ControlRegister::SPRITE_SIZE)
     }
 
-    pub fn sprt_pattern_addr(&self) -> u16 {
+    pub fn sprite_pattern_addr(&self) -> u16 {
         // ignored in 8x16 mode
 
         if !self.contains(ControlRegister::SPRITE_PATTERN_ADDR) {
@@ -333,6 +333,10 @@ impl StatusRegister {
         self.set_vblank_status(false)
     }
 
+    pub fn set_sprite_zero_hit(&mut self, value: bool) {
+        self.set(StatusRegister::SPRITE_ZERO_HIT, value)
+    }
+
     pub fn update(&mut self, data: u8) {
         *self.0.bits_mut() = data;
     }
@@ -354,6 +358,10 @@ bitflags! {
 impl MaskRegister {
     pub fn new() -> Self {
         MaskRegister::from_bits_truncate(0b0000_0000)
+    }
+
+    pub fn show_sprites(&self) -> bool {
+        self.contains(MaskRegister::SHOW_SPRITES)
     }
 
     pub fn update(&mut self, data: u8) {
