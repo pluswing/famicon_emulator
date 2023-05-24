@@ -16,15 +16,15 @@ pub struct NesPPU {
     pub ctrl: ControlRegister, // 0x2000
     internal_data_buf: u8,
 
-    // TODO Mask 0x2001
+    // Mask 0x2001
     mask: MaskRegister,
 
     // Status 0x2002
     status: StatusRegister,
 
-    // TODO OAM Address 0x2003, 0x2004
-    // TODO Scroll 0x2005
-    // TODO OAM DMA 0x4014
+    // Scroll 0x2005
+    pub scroll: ScrollRegister,
+
     cycles: usize,
     scanline: usize,
     pub nmi_interrupt: Option<i32>,
@@ -43,6 +43,7 @@ impl NesPPU {
             ctrl: ControlRegister::new(),
             status: StatusRegister::new(),
             mask: MaskRegister::new(),
+            scroll: ScrollRegister::new(),
             internal_data_buf: 0,
             cycles: 0,
             scanline: 0,
@@ -84,6 +85,8 @@ impl NesPPU {
     }
 
     pub fn read_status(&self) -> u8 {
+        // スクロール ($2005)  PPUSTATUSを読み取ってアドレス ラッチをリセットした後
+        self.scroll.reset();
         self.status.bits()
     }
 
@@ -110,6 +113,10 @@ impl NesPPU {
 
     pub fn write_to_oam_dma(&mut self, values: [u8; 256]) {
         self.oam_data = values;
+    }
+
+    pub fn write_to_scroll(&mut self, value: u8) {
+        self.scroll.set(value);
     }
 
     fn increment_vram_addr(&mut self) {
@@ -305,6 +312,18 @@ impl ControlRegister {
             0x1000
         }
     }
+
+    pub fn nametable_addr(&self) -> u16 {
+        match (
+            self.contains(ControlRegister::NAMETABLE1),
+            self.contains(ControlRegister::NAMETABLE2),
+        ) {
+            (false, false) => 0x2000,
+            (false, true) => 0x2400,
+            (true, false) => 0x2800,
+            (true, true) => 0x2C00,
+        }
+    }
 }
 
 bitflags! {
@@ -366,5 +385,34 @@ impl MaskRegister {
 
     pub fn update(&mut self, data: u8) {
         *self.0.bits_mut() = data;
+    }
+}
+
+pub struct ScrollRegister {
+    pub scroll_x: u8,
+    pub scroll_y: u8,
+    write_x: bool,
+}
+
+impl ScrollRegister {
+    pub fn new() -> Self {
+        ScrollRegister {
+            scroll_x: 0,
+            scroll_y: 0,
+            write_x: true,
+        }
+    }
+
+    fn set(&mut self, data: u8) {
+        if self.write_x {
+            self.scroll_x = data;
+        } else {
+            self.scroll_y = data;
+        }
+        self.write_x = !self.write_x;
+    }
+
+    pub fn reset(&mut self) {
+        self.write_x = true;
     }
 }

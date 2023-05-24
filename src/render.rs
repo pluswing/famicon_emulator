@@ -3,6 +3,7 @@ use sdl2::libc::attribute_set_t;
 use crate::frame::Frame;
 use crate::palette;
 use crate::ppu::NesPPU;
+use crate::rom::Mirroring;
 
 struct Rect {
     x1: usize,
@@ -24,6 +25,40 @@ impl Rect {
 
 pub fn render(ppu: &NesPPU, frame: &mut Frame) {
     // draw background
+    let scroll_x = (ppu.scroll.scroll_x) as usize;
+    let scroll_y = (ppu.scroll.scroll_y) as usize;
+
+    let (main_name_table, second_name_table) = match (&ppu.mirroring, ppu.ctrl.nametable_addr()) {
+        (Mirroring::VERTICAL, 0x2000) | (Mirroring::VERTICAL, 0x2800) => {
+            (&ppu.vram[0x000..0x400], &ppu.vram[0x400..0x800])
+        }
+        (Mirroring::VERTICAL, 0x2400) | (Mirroring::VERTICAL, 0x2C00) => {
+            (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
+        }
+        (_, _) => {
+            panic!("Not supported mirroring type {:?}", ppu.mirroring);
+        }
+    };
+
+    render_name_table(
+        ppu,
+        frame,
+        main_name_table,
+        Rect::new(scroll_x, scroll_y, 256, 240),
+        -(scroll_x as isize),
+        -(scroll_y as isize),
+    );
+
+    render_name_table(
+        ppu,
+        frame,
+        second_name_table,
+        Rect::new(0, 0, scroll_x, 240),
+        (256 - scroll_x) as isize,
+        0,
+    );
+
+    /*
     let bank = ppu.ctrl.background_pattern_addr();
     for i in 0..0x03C0 {
         let tile = ppu.vram[i] as u16;
@@ -51,6 +86,7 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
             }
         }
     }
+    */
 
     // draw sprites
     // TODO 8x16 mode
