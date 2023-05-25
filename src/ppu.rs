@@ -62,12 +62,14 @@ impl NesPPU {
         match addr {
             0..=0x1FFF => {
                 // FIXME
+                todo!("0..=0x1FFF")
             }
             0x2000..=0x2FFF => {
                 self.vram[self.mirror_vram_addr(addr) as usize] = value;
             }
             0x3000..=0x3EFF => {
                 // FIXME
+                todo!("0x3000..=0x3EFF")
             }
             0x3F00..=0x3FFF => {
                 self.palette_table[(addr - 0x3F00) as usize] = value;
@@ -84,7 +86,7 @@ impl NesPPU {
         }
     }
 
-    pub fn read_status(&self) -> u8 {
+    pub fn read_status(&mut self) -> u8 {
         // スクロール ($2005)  PPUSTATUSを読み取ってアドレス ラッチをリセットした後
         self.scroll.reset();
         self.status.bits()
@@ -172,11 +174,10 @@ impl NesPPU {
             self.scanline += 1;
 
             if self.scanline == 241 {
-                // self.status.set_vblank_status(true);
+                self.status.set_vblank_status(true);
                 self.status.set_sprite_zero_hit(false);
                 if self.ctrl.generate_vblank_nmi() {
-                    self.status.set_vblank_status(true);
-                    // todo!("Should trigger NMI interupt")
+                    // self.status.set_vblank_status(true);
                     self.nmi_interrupt = Some(1);
                 }
             }
@@ -315,8 +316,8 @@ impl ControlRegister {
 
     pub fn nametable_addr(&self) -> u16 {
         match (
-            self.contains(ControlRegister::NAMETABLE1),
             self.contains(ControlRegister::NAMETABLE2),
+            self.contains(ControlRegister::NAMETABLE1),
         ) {
             (false, false) => 0x2000,
             (false, true) => 0x2400,
@@ -328,10 +329,14 @@ impl ControlRegister {
 
 bitflags! {
   pub struct StatusRegister: u8 {
-    const PPU_OPEN_BUS       = 0b0001_1111;
-    const SPRITE_OVERFLOW    = 0b0010_0000;
-    const SPRITE_ZERO_HIT    = 0b0100_0000;
-    const VBLANK_HAS_STARTED = 0b1000_0000;
+    const PPU_OPEN_BUS1       = 0b0000_0001;
+    const PPU_OPEN_BUS2       = 0b0000_0010;
+    const PPU_OPEN_BUS3       = 0b0000_0100;
+    const PPU_OPEN_BUS4       = 0b0000_1000;
+    const PPU_OPEN_BUS5       = 0b0001_0000;
+    const SPRITE_OVERFLOW     = 0b0010_0000;
+    const SPRITE_ZERO_HIT     = 0b0100_0000;
+    const VBLANK_HAS_STARTED  = 0b1000_0000;
   }
 }
 

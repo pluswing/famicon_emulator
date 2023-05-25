@@ -56,9 +56,9 @@ fn main() {
     key_map.insert(Keycode::A, joypad::JoypadButton::BUTTON_A);
     key_map.insert(Keycode::S, joypad::JoypadButton::BUTTON_B);
 
-    let rom = alter_ego_rom();
+    let rom = mario_rom();
     let mut frame = Frame::new();
-    let bus = Bus::new(rom, move |ppu: &NesPPU, joypad: &mut Joypad| {
+    let bus = Bus::new(rom, move |ppu: &NesPPU, joypad1: &mut Joypad| {
         render::render(ppu, &mut frame);
         texture.update(None, &frame.data, 256 * 3).unwrap();
 
@@ -74,12 +74,12 @@ fn main() {
                 } => std::process::exit(0),
                 Event::KeyDown { keycode, .. } => {
                     if let Some(key) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
-                        joypad.set_button_pressed_status(*key, true);
+                        joypad1.set_button_pressed_status(*key, true);
                     }
                 }
                 Event::KeyUp { keycode, .. } => {
                     if let Some(key) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
-                        joypad.set_button_pressed_status(*key, false);
+                        joypad1.set_button_pressed_status(*key, false);
                     }
                 }
                 _ => { /* do nothing */ }
@@ -91,6 +91,7 @@ fn main() {
 
     cpu.reset();
     cpu.run_with_callback(move |cpu| {
+
         // println!("{}", trace(cpu));
     });
 

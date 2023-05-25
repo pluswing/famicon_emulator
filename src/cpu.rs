@@ -202,7 +202,7 @@ impl<'a> CPU<'a> {
 
     pub fn mem_read_u16(&mut self, pos: u16) -> u16 {
         // FIXME
-        if pos == 0xFF || pos == 0x02FF {
+        if pos == 0x00FF || pos == 0x02FF {
             let lo = self.mem_read(pos) as u16;
             let hi = self.mem_read(pos & 0xFF00) as u16;
             return (hi << 8) | (lo as u16);
@@ -234,8 +234,6 @@ impl<'a> CPU<'a> {
         self.stack_pointer = 0xFD;
 
         self.program_counter = self.mem_read_u16(0xFFFC);
-        // FIXME FOR TEST
-        // self.program_counter = 0xC000;
     }
 
     pub fn load(&mut self) {
@@ -257,15 +255,28 @@ impl<'a> CPU<'a> {
             let opscode = self.mem_read(self.program_counter);
             self.program_counter += 1;
 
-            // println!("OPS: {:X}", opscode);
             let op = self.find_ops(opscode);
             match op {
                 Some(op) => {
-                    // FIXME FOR TEST
-                    // if op.name == "BRK" {
-                    //     return;
-                    // }
                     self.add_cycles = 0;
+                    if op.bytes == 1 {
+                        println!("OP: {} {:?}", op.name, op.addressing_mode);
+                    } else if op.bytes == 2 {
+                        println!(
+                            "OP: {} {:02X} {:?}",
+                            op.name,
+                            self.mem_read(self.program_counter),
+                            op.addressing_mode
+                        );
+                    } else if op.bytes == 3 {
+                        println!(
+                            "OP: {} {:02X}{:02X} {:?}",
+                            op.name,
+                            self.mem_read(self.program_counter),
+                            self.mem_read(self.program_counter + 1),
+                            op.addressing_mode
+                        );
+                    }
 
                     callback(self);
                     call(self, &op);

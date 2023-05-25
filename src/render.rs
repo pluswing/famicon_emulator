@@ -1,5 +1,3 @@
-use sdl2::libc::attribute_set_t;
-
 use crate::frame::Frame;
 use crate::palette;
 use crate::ppu::NesPPU;
@@ -58,36 +56,6 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
         0,
     );
 
-    /*
-    let bank = ppu.ctrl.background_pattern_addr();
-    for i in 0..0x03C0 {
-        let tile = ppu.vram[i] as u16;
-        let tile_x = i % 32;
-        let tile_y = i / 32;
-        let tile = &ppu.chr_rom[(bank + tile * 16) as usize..=(bank + tile * 16 + 15) as usize];
-        let palette = bg_pallette(ppu, tile_x, tile_y);
-
-        for y in 0..=7 {
-            let mut upper = tile[y];
-            let mut lower = tile[y + 8];
-
-            for x in (0..=7).rev() {
-                let value = (1 & upper) << 1 | (1 & lower);
-                upper = upper >> 1;
-                lower = lower >> 1;
-                let rgb = match value {
-                    0 => palette::SYSTEM_PALLETE[ppu.palette_table[0] as usize],
-                    1 => palette::SYSTEM_PALLETE[palette[1] as usize],
-                    2 => palette::SYSTEM_PALLETE[palette[2] as usize],
-                    3 => palette::SYSTEM_PALLETE[palette[3] as usize],
-                    _ => panic!("can't be"),
-                };
-                frame.set_pixel(tile_x * 8 + x, tile_y * 8 + y, rgb)
-            }
-        }
-    }
-    */
-
     // draw sprites
     // TODO 8x16 mode
     for i in (0..ppu.oam_data.len()).step_by(4).rev() {
@@ -132,9 +100,14 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
     }
 }
 
-fn bg_pallette(ppu: &NesPPU, tile_column: usize, tile_row: usize) -> [u8; 4] {
+fn bg_pallette(
+    ppu: &NesPPU,
+    attribute_table: &[u8],
+    tile_column: usize,
+    tile_row: usize,
+) -> [u8; 4] {
     let attr_table_idx = tile_row / 4 * 8 + tile_column / 4;
-    let attr_byte = ppu.vram[0x03C0 + attr_table_idx];
+    let attr_byte = attribute_table[attr_table_idx];
 
     let pallet_idx = match (tile_column % 4 / 2, tile_row % 4 / 2) {
         (0, 0) => attr_byte & 0b11,
@@ -175,7 +148,7 @@ fn render_name_table(
     let attribute_table = &name_table[0x03C0..0x0400];
 
     for i in 0..0x03C0 {
-        let tile_column = i & 32;
+        let tile_column = i % 32;
         let tile_row = i / 32;
         let tile_idx = name_table[i] as u16;
         let tile =

@@ -7,6 +7,7 @@ pub struct Bus<'call> {
     prg_rom: Vec<u8>,
     ppu: NesPPU,
     joypad1: Joypad,
+    joypad2: Joypad,
 
     cycles: usize,
     gameloop_callback: Box<dyn FnMut(&NesPPU, &mut Joypad) + 'call>,
@@ -23,6 +24,7 @@ impl<'a> Bus<'a> {
             prg_rom: rom.prg_rom,
             ppu: ppu,
             joypad1: Joypad::new(),
+            joypad2: Joypad::new(),
             cycles: 0,
             gameloop_callback: Box::from(gameloop_callback),
         }
@@ -87,6 +89,7 @@ impl Mem for Bus<'_> {
                 self.mem_read(mirror_down_addr)
             }
             0x4016 => self.joypad1.read(),
+            0x4017 => self.joypad2.read(),
             PRG_ROM..=PRG_ROM_END => self.read_prg_rom(addr),
             _ => {
                 println!("Ignoreing mem access at {:X}", addr);
@@ -119,7 +122,6 @@ impl Mem for Bus<'_> {
             0x2005 => {
                 self.ppu.write_to_scroll(data);
             }
-            0x2005 => {}
             0x2006 => {
                 self.ppu.write_to_ppu_addr(data);
             }
@@ -142,11 +144,14 @@ impl Mem for Bus<'_> {
             0x400C | 0x400E | 0x400F => {
                 // TODO APU 4ch
             }
-            0x4010..=0x4013 | 0x4015 | 0x4017 => {
+            0x4010..=0x4013 | 0x4015 => {
                 // TODO DMCch
             }
             0x4016 => {
                 self.joypad1.write(data);
+            }
+            0x4017 => {
+                self.joypad2.write(data);
             }
             0x4014 => {
                 // $XX を書き込むと、256 バイトのデータが CPU ページ $XX00 ～ $XXFF から内部 PPU OAM にアップロードされます。このページは通常、内部 RAM (通常は $0200 ～ $02FF) にありますが、カートリッジ RAM または ROM も使用できます。
