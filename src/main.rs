@@ -17,6 +17,7 @@ use crate::cpu::trace;
 use self::bus::{Bus, Mem};
 use self::cpu::CPU;
 
+use cartridge::load_rom;
 use cartridge::test::{alter_ego_rom, mario_rom, test_rom};
 use frame::{show_tile, Frame};
 use joypad::Joypad;
@@ -56,7 +57,7 @@ fn main() {
     key_map.insert(Keycode::A, joypad::JoypadButton::BUTTON_A);
     key_map.insert(Keycode::S, joypad::JoypadButton::BUTTON_B);
 
-    let rom = mario_rom();
+    let rom = load_rom("rom/nestest.nes");
     let mut frame = Frame::new();
     let bus = Bus::new(rom, move |ppu: &NesPPU, joypad1: &mut Joypad| {
         render::render(ppu, &mut frame);

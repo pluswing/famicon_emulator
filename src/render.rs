@@ -33,6 +33,13 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
         (Mirroring::VERTICAL, 0x2400) | (Mirroring::VERTICAL, 0x2C00) => {
             (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
         }
+        // FIXME 間違えてる
+        (Mirroring::HORIZONTAL, 0x2000) | (Mirroring::HORIZONTAL, 0x2800) => {
+            (&ppu.vram[0x000..0x400], &ppu.vram[0x400..0x800])
+        }
+        (Mirroring::HORIZONTAL, 0x2400) | (Mirroring::HORIZONTAL, 0x2C00) => {
+            (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
+        }
         (_, _) => {
             panic!("Not supported mirroring type {:?}", ppu.mirroring);
         }

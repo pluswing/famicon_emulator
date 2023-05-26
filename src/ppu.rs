@@ -62,14 +62,15 @@ impl NesPPU {
         match addr {
             0..=0x1FFF => {
                 // FIXME
-                todo!("0..=0x1FFF")
+                // todo!("0..=0x1FFF")
             }
             0x2000..=0x2FFF => {
                 self.vram[self.mirror_vram_addr(addr) as usize] = value;
             }
             0x3000..=0x3EFF => {
                 // FIXME
-                todo!("0x3000..=0x3EFF")
+                // todo!("0x3000..=0x3EFF")
+                self.vram[self.mirror_vram_addr(addr) as usize] = value;
             }
             0x3F00..=0x3FFF => {
                 self.palette_table[(addr - 0x3F00) as usize] = value;
