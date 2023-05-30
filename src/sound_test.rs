@@ -1,10 +1,19 @@
 use sdl2::audio::{AudioCallback, AudioSpecDesired};
+use std::sync::mpsc::{channel, Receiver};
 use std::time::Duration;
 
-struct SquareWave {
-    phase_inc: f32,
-    phase: f32,
+#[derive(Debug, Clone, PartialEq)]
+struct SquareNote {
+    hz: f32,
     volume: f32,
+    duty: f32,
+}
+
+struct SquareWave {
+    freq: f32,
+    phase: f32,
+    receiver: Receiver<SquareNote>,
+    note: SquareNote,
 }
 
 impl AudioCallback for SquareWave {
@@ -12,12 +21,17 @@ impl AudioCallback for SquareWave {
 
     fn callback(&mut self, out: &mut [f32]) {
         for x in out.iter_mut() {
-            *x = if self.phase <= 0.5 {
-                self.volume
+            let res = self.receiver.recv_timeout(Duration::from_millis(0));
+            match res {
+                Ok(note) => self.note = note,
+                Err(_) => {}
+            }
+            *x = if self.phase <= self.note.duty {
+                self.note.volume
             } else {
-                -self.volume
+                -self.note.volume
             };
-            self.phase = (self.phase + self.phase_inc) % 1.0;
+            self.phase = (self.phase + self.note.hz / self.freq) % 1.0;
         }
     }
 }
@@ -25,6 +39,8 @@ impl AudioCallback for SquareWave {
 fn main() {
     let sdl_context = sdl2::init().unwrap();
     let audio_subsystem = sdl_context.audio().unwrap();
+
+    let (sender, receiver) = channel::<SquareNote>();
 
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
@@ -34,13 +50,38 @@ fn main() {
 
     let device = audio_subsystem
         .open_playback(None, &desired_spec, |spec| SquareWave {
-            phase_inc: 440.0 / spec.freq as f32,
+            freq: spec.freq as f32,
             phase: 0.0,
-            volume: 0.25,
+            receiver: receiver,
+            note: SquareNote {
+                hz: 261.626,
+                volume: 0.25,
+                duty: 0.25,
+            },
         })
         .unwrap();
 
     device.resume();
+
+    std::thread::sleep(Duration::from_millis(2000));
+
+    sender
+        .send(SquareNote {
+            hz: 293.665,
+            volume: 0.25,
+            duty: 0.125,
+        })
+        .unwrap();
+
+    std::thread::sleep(Duration::from_millis(2000));
+
+    sender
+        .send(SquareNote {
+            hz: 329.628,
+            volume: 0.25,
+            duty: 0.125,
+        })
+        .unwrap();
 
     std::thread::sleep(Duration::from_millis(2000));
 }
