@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
 
+mod apu;
 mod bus;
 mod cartridge;
 mod cpu;
