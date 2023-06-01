@@ -35,11 +35,10 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
         (Mirroring::VERTICAL, 0x2400) | (Mirroring::VERTICAL, 0x2C00) => {
             (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
         }
-        // FIXME 間違えてる
-        (Mirroring::HORIZONTAL, 0x2000) | (Mirroring::HORIZONTAL, 0x2800) => {
+        (Mirroring::HORIZONTAL, 0x2000) | (Mirroring::HORIZONTAL, 0x2400) => {
             (&ppu.vram[0x000..0x400], &ppu.vram[0x400..0x800])
         }
-        (Mirroring::HORIZONTAL, 0x2400) | (Mirroring::HORIZONTAL, 0x2C00) => {
+        (Mirroring::HORIZONTAL, 0x2800) | (Mirroring::HORIZONTAL, 0x2C00) => {
             (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
         }
         (_, _) => {
@@ -47,22 +46,47 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
         }
     };
 
+    let screen_w = 256;
+    let screen_h = 240;
+
+    // 左上
     render_name_table(
         ppu,
         frame,
         main_name_table,
-        Rect::new(scroll_x, scroll_y, 256, 240),
+        Rect::new(scroll_x, scroll_y, screen_w, screen_h),
         -(scroll_x as isize),
         -(scroll_y as isize),
     );
 
+    // 右下
     render_name_table(
         ppu,
         frame,
         second_name_table,
-        Rect::new(0, 0, scroll_x, 240),
-        (256 - scroll_x) as isize,
-        0,
+        Rect::new(0, 0, scroll_x, scroll_y),
+        (screen_w - scroll_x) as isize,
+        (screen_h - scroll_y) as isize,
+    );
+
+    // 左下
+    render_name_table(
+        ppu,
+        frame,
+        main_name_table,
+        Rect::new(scroll_x, 0, screen_w, scroll_y),
+        -(scroll_x as isize),
+        (screen_h - scroll_y) as isize,
+    );
+
+    // 右上
+    render_name_table(
+        ppu,
+        frame,
+        main_name_table,
+        Rect::new(0, scroll_y, scroll_x, screen_h),
+        (screen_w - scroll_x) as isize,
+        -(scroll_y as isize),
     );
 
     // draw sprites
