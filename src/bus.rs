@@ -1,6 +1,7 @@
 use crate::joypad::Joypad;
 use crate::ppu::NesPPU;
 use crate::rom::Rom;
+use log::{debug, error, info, log_enabled, trace, warn, Level};
 
 pub struct Bus<'call> {
     cpu_vram: [u8; 2048],
@@ -76,10 +77,18 @@ impl Mem for Bus<'_> {
         match addr {
             RAM..=RAM_MIRRORS_END => {
                 let mirror_down_addr = addr & 0b_0000_0111_1111_1111;
-                self.cpu_vram[mirror_down_addr as usize]
+                let v = self.cpu_vram[mirror_down_addr as usize];
+                trace!(
+                    "RAM READ {:04X} => {:04X} ({:02X})",
+                    addr,
+                    mirror_down_addr,
+                    v
+                );
+                v
             }
             0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 | 0x4014 => {
-                panic!("Attempt to read from write-only PPU address {:X}", addr);
+                warn!("Attempt to read from write-only PPU address {:X}", addr);
+                0
             }
             0x2002 => self.ppu.read_status(),
             0x2004 => self.ppu.read_oam_data(),
@@ -92,7 +101,7 @@ impl Mem for Bus<'_> {
             0x4017 => self.joypad2.read(),
             PRG_ROM..=PRG_ROM_END => self.read_prg_rom(addr),
             _ => {
-                println!("Ignoreing mem access at {:X}", addr);
+                warn!("Ignoreing mem access at {:X}", addr);
                 0
             }
         }
@@ -103,6 +112,12 @@ impl Mem for Bus<'_> {
             RAM..=RAM_MIRRORS_END => {
                 let mirror_down_addr = addr & 0b_0000_0111_1111_1111;
                 self.cpu_vram[mirror_down_addr as usize] = data;
+                trace!(
+                    "RAM WRITE {:04X} => {:04X} ({:02X})",
+                    addr,
+                    mirror_down_addr,
+                    data
+                );
             }
             0x2000 => {
                 self.ppu.write_to_ctrl(data);
@@ -162,10 +177,10 @@ impl Mem for Bus<'_> {
                 self.ppu.write_to_oam_dma(values);
             }
             PRG_ROM..=PRG_ROM_END => {
-                panic!("Attempt to write to Cartrige ROM space")
+                warn!("Attempt to write to Cartrige ROM space")
             }
             _ => {
-                println!("Ignoreing mem write-access at {:X}", addr)
+                error!("Ignoreing mem write-access at {:X}", addr)
             }
         }
     }

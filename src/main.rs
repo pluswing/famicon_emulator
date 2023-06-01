@@ -21,6 +21,7 @@ use cartridge::load_rom;
 use cartridge::test::{alter_ego_rom, mario_rom, test_rom};
 use frame::{show_tile, Frame};
 use joypad::Joypad;
+use log::{debug, info, trace};
 use ppu::NesPPU;
 use rand::Rng;
 use sdl2::event::Event;
@@ -31,6 +32,8 @@ use sdl2::EventPump;
 use std::collections::HashMap;
 
 fn main() {
+    env_logger::init();
+
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
@@ -92,8 +95,7 @@ fn main() {
 
     cpu.reset();
     cpu.run_with_callback(move |cpu| {
-
-        // println!("{}", trace(cpu));
+        trace!("{}", trace(cpu));
     });
 
     /*
@@ -109,7 +111,7 @@ fn main() {
         let mut rng = rand::thread_rng();
     /
         cpu.run_with_callback(move |cpu| {
-            println!("{}", trace(cpu));
+            debug!("{}", trace(cpu));
             handle_user_input(cpu, &mut event_pump);
             let r: u8 = rng.gen_range(1..16);
             cpu.mem_write(0xFE, r);

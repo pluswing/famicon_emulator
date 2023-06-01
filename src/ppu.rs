@@ -1,6 +1,7 @@
 use bitflags::bitflags;
+use log::{debug, info, trace};
 
-use crate::rom::Mirroring;
+use crate::{cpu::IN_TRACE, rom::Mirroring};
 
 pub struct NesPPU {
     pub chr_rom: Vec<u8>,
@@ -57,19 +58,35 @@ impl NesPPU {
 
     pub fn write_to_data(&mut self, value: u8) {
         let addr = self.addr.get();
-        self.increment_vram_addr();
+        if !unsafe { IN_TRACE } {
+            self.increment_vram_addr();
+        }
+
+        //        debug!("WRITE PPU: {:04X} {:02X}", addr, value);
 
         match addr {
             0..=0x1FFF => {
                 // FIXME
-                // todo!("0..=0x1FFF")
+                debug!("write CHR_ROM {:04X} => {:02X}", addr, value);
+                // self.chr_rom[addr as usize] = value;
+                // self.vram[self.mirror_vram_addr(addr) as usize] = value;
             }
             0x2000..=0x2FFF => {
+                trace!(
+                    "WRITE PPU_VRAM {:04X} {:02X} => ({:02X})",
+                    addr,
+                    self.mirror_vram_addr(addr) as usize,
+                    value
+                );
                 self.vram[self.mirror_vram_addr(addr) as usize] = value;
             }
             0x3000..=0x3EFF => {
-                // FIXME
-                // todo!("0x3000..=0x3EFF")
+                trace!(
+                    "WRITE PPU_VRAM MIRROR {:04X} {:02X} => ({:02X})",
+                    addr,
+                    self.mirror_vram_addr(addr) as usize,
+                    value
+                );
                 self.vram[self.mirror_vram_addr(addr) as usize] = value;
             }
             0x3F00..=0x3FFF => {
@@ -89,8 +106,13 @@ impl NesPPU {
 
     pub fn read_status(&mut self) -> u8 {
         // スクロール ($2005)  PPUSTATUSを読み取ってアドレス ラッチをリセットした後
-        self.scroll.reset();
-        self.status.bits()
+        if unsafe { IN_TRACE } {
+            self.status.bits()
+        } else {
+            self.scroll.reset();
+            let bits = self.status.bits();
+            bits
+        }
     }
 
     pub fn write_to_status(&mut self, value: u8) {
@@ -106,6 +128,7 @@ impl NesPPU {
     }
 
     pub fn write_to_oam_data(&mut self, value: u8) {
+        debug!("OAM: {:04X} => {:02X}", self.oam_addr, value);
         self.oam_data[self.oam_addr as usize] = value;
         self.oam_addr = self.oam_addr.wrapping_add(1)
     }
@@ -115,6 +138,8 @@ impl NesPPU {
     }
 
     pub fn write_to_oam_dma(&mut self, values: [u8; 256]) {
+        debug!("OAM DMA: ADDR:{:02X}", self.oam_addr);
+        debug!("{:?}", values);
         self.oam_data = values;
     }
 
@@ -128,18 +153,30 @@ impl NesPPU {
 
     pub fn read_data(&mut self) -> u8 {
         let addr = self.addr.get();
-        self.increment_vram_addr();
+        if !unsafe { IN_TRACE } {
+            self.increment_vram_addr();
+        }
+        debug!("READ PPU: {:04X}", addr);
 
         match addr {
             0..=0x1FFF => {
-                let result = self.internal_data_buf;
-                self.internal_data_buf = self.chr_rom[addr as usize];
-                result
+                if unsafe { IN_TRACE } {
+                    self.internal_data_buf
+                } else {
+                    let result = self.internal_data_buf;
+                    self.internal_data_buf = self.chr_rom[addr as usize];
+                    result
+                }
             }
             0x2000..=0x2FFF => {
-                let result = self.internal_data_buf;
-                self.internal_data_buf = self.vram[self.mirror_vram_addr(addr) as usize];
-                result
+                if unsafe { IN_TRACE } {
+                    self.internal_data_buf
+                } else {
+                    let result = self.internal_data_buf;
+                    self.internal_data_buf = self.vram[self.mirror_vram_addr(addr) as usize];
+                    result
+                }
+            }
             }
             0x3000..=0x3EFF => panic!(
                 "addr space 0x3000..0x3EFF is not expected to be used, requested = {} ",

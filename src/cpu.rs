@@ -1,3 +1,5 @@
+use log::debug;
+
 use crate::opscodes::{call, CPU_OPS_CODES};
 
 use crate::bus::{Bus, Mem};
@@ -82,6 +84,8 @@ pub struct CPU<'a> {
 
     add_cycles: u8,
 }
+
+pub static mut IN_TRACE: bool = false;
 
 impl Mem for CPU<'_> {
     fn mem_read(&mut self, addr: u16) -> u8 {
@@ -203,6 +207,7 @@ impl<'a> CPU<'a> {
     pub fn mem_read_u16(&mut self, pos: u16) -> u16 {
         // FIXME
         if pos == 0x00FF || pos == 0x02FF {
+            debug!("mem_read_u16 page boundary. {:04X}", pos);
             let lo = self.mem_read(pos) as u16;
             let hi = self.mem_read(pos & 0xFF00) as u16;
             return (hi << 8) | (lo as u16);
@@ -259,25 +264,26 @@ impl<'a> CPU<'a> {
             match op {
                 Some(op) => {
                     self.add_cycles = 0;
-                    if op.bytes == 1 {
-                        println!("OP: {} {:?}", op.name, op.addressing_mode);
-                    } else if op.bytes == 2 {
-                        println!(
-                            "OP: {} {:02X} {:?}",
-                            op.name,
-                            self.mem_read(self.program_counter),
-                            op.addressing_mode
-                        );
-                    } else if op.bytes == 3 {
-                        println!(
-                            "OP: {} {:02X}{:02X} {:?}",
-                            op.name,
-                            self.mem_read(self.program_counter),
-                            self.mem_read(self.program_counter + 1),
-                            op.addressing_mode
-                        );
-                    }
-
+                    /*
+                                        if op.bytes == 1 {
+                                            debug!("OP: {} {:?}", op.name, op.addressing_mode);
+                                        } else if op.bytes == 2 {
+                                            debug!(
+                                                "OP: {} {:02X} {:?}",
+                                                op.name,
+                                                self.mem_read(self.program_counter),
+                                                op.addressing_mode
+                                            );
+                                        } else if op.bytes == 3 {
+                                            debug!(
+                                                "OP: {} {:02X}{:02X} {:?}",
+                                                op.name,
+                                                self.mem_read(self.program_counter),
+                                                self.mem_read(self.program_counter + 1),
+                                                op.addressing_mode
+                                            );
+                                        }
+                    */
                     callback(self);
                     call(self, &op);
 
@@ -957,6 +963,7 @@ pub fn trace(cpu: &mut CPU) -> String {
     // OK LDX #$01 => asm code
     // "0400 @ 0400 = AA" => memory access
     // OK A:01 X:02 Y:03 P:24 SP:FD => register, status, stack_pointer
+    unsafe { IN_TRACE = true };
 
     let program_counter = cpu.program_counter - 1;
     let pc = format!("{:<04X}", program_counter);
@@ -971,6 +978,7 @@ pub fn trace(cpu: &mut CPU) -> String {
     let asm = disasm(program_counter, &ops, &args);
     let memacc = memory_access(cpu, &ops, &args);
     let status = cpu2str(cpu);
+    unsafe { IN_TRACE = false };
 
     format!(
         "{:<6}{:<9}{:<33}{}",
