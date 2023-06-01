@@ -180,6 +180,10 @@ impl Mem for Bus<'_> {
                     values[i] = self.mem_read((data as u16) << 8 | i as u16);
                 }
                 self.ppu.write_to_oam_dma(values);
+                // Not counting the OAMDMA write tick, the above procedure takes 513 CPU cycles (+1 on odd CPU cycles)
+                for _ in 0..513 {
+                    self.ppu.tick(1);
+                }
             }
             PRG_ROM..=PRG_ROM_END => {
                 warn!("Attempt to write to Cartrige ROM space")
