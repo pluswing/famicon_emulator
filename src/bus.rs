@@ -1,3 +1,4 @@
+use crate::apu::NesAPU;
 use crate::joypad::Joypad;
 use crate::ppu::NesPPU;
 use crate::rom::Rom;
@@ -9,13 +10,14 @@ pub struct Bus<'call> {
     ppu: NesPPU,
     joypad1: Joypad,
     joypad2: Joypad,
+    apu: NesAPU,
 
     cycles: usize,
     gameloop_callback: Box<dyn FnMut(&NesPPU, &mut Joypad) + 'call>,
 }
 
 impl<'a> Bus<'a> {
-    pub fn new<'call, F>(rom: Rom, gameloop_callback: F) -> Bus<'call>
+    pub fn new<'call, F>(rom: Rom, apu: NesAPU, gameloop_callback: F) -> Bus<'call>
     where
         F: FnMut(&NesPPU, &mut Joypad) + 'call,
     {
@@ -26,6 +28,7 @@ impl<'a> Bus<'a> {
             ppu: ppu,
             joypad1: Joypad::new(),
             joypad2: Joypad::new(),
+            apu: apu,
             cycles: 0,
             gameloop_callback: Box::from(gameloop_callback),
         }
@@ -154,6 +157,7 @@ impl Mem for Bus<'_> {
             }
             0x4000..=0x4003 => {
                 // TODO APU 1ch
+                self.apu.write1ch(addr, data)
             }
             0x4004..=0x4007 => {
                 // TODO APU 2ch
