@@ -18,6 +18,7 @@ use crate::cpu::trace;
 use self::bus::{Bus, Mem};
 use self::cpu::CPU;
 
+use apu::NesAPU;
 use cartridge::load_rom;
 use cartridge::test::{alter_ego_rom, mario_rom, test_rom};
 use frame::{show_tile, Frame};
@@ -59,8 +60,11 @@ fn main() {
     key_map.insert(Keycode::S, joypad::JoypadButton::BUTTON_B);
 
     let rom = load_rom("rom/BombSweeper.nes");
+    let rom = alter_ego_rom();
+
     let mut frame = Frame::new();
-    let bus = Bus::new(rom, move |ppu: &NesPPU, joypad1: &mut Joypad| {
+    let apu = NesAPU::new(&sdl_context);
+    let bus = Bus::new(rom, apu, move |ppu: &NesPPU, joypad1: &mut Joypad| {
         render::render(ppu, &mut frame);
         texture.update(None, &frame.data, 256 * 3).unwrap();
 

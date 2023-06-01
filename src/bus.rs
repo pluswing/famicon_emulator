@@ -16,7 +16,7 @@ pub struct Bus<'call> {
 }
 
 impl<'a> Bus<'a> {
-    pub fn new<'call, F>(rom: Rom, gameloop_callback: F) -> Bus<'call>
+    pub fn new<'call, F>(rom: Rom, apu: NesAPU, gameloop_callback: F) -> Bus<'call>
     where
         F: FnMut(&NesPPU, &mut Joypad) + 'call,
     {
@@ -27,7 +27,7 @@ impl<'a> Bus<'a> {
             ppu: ppu,
             joypad1: Joypad::new(),
             joypad2: Joypad::new(),
-            apu: NesAPU::new(),
+            apu: apu,
             cycles: 0,
             gameloop_callback: Box::from(gameloop_callback),
         }
