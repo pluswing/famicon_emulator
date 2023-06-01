@@ -207,6 +207,15 @@ impl NesPPU {
                     result
                 }
             }
+            0x3000..=0x3EFF => {
+                if unsafe { IN_TRACE } {
+                    self.internal_data_buf
+                } else {
+                    let result = self.internal_data_buf;
+                    self.internal_data_buf = self.vram[self.mirror_vram_addr(addr) as usize];
+                    result
+                }
+            }
             0x3F00..=0x3F1F => {
                 if unsafe { IN_TRACE } {
                     self.internal_data_buf
@@ -220,10 +229,6 @@ impl NesPPU {
                 // TODO
                 0
             }
-            0x3000..=0x3EFF => panic!(
-                "addr space 0x3000..0x3EFF is not expected to be used, requested = {} ",
-                addr,
-            ),
             _ => panic!("unexpected access to mirrored space {}", addr),
         }
     }
