@@ -53,6 +53,11 @@ impl<'a> Bus<'a> {
     }
 
     pub fn poll_nmi_status(&mut self) -> Option<i32> {
+        if self.ppu.clear_nmi_interrupt {
+            self.ppu.clear_nmi_interrupt = false;
+            self.ppu.nmi_interrupt = None;
+            return None;
+        }
         let res = self.ppu.nmi_interrupt;
         self.ppu.nmi_interrupt = None;
         res

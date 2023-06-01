@@ -29,6 +29,7 @@ pub struct NesPPU {
     cycles: usize,
     scanline: usize,
     pub nmi_interrupt: Option<i32>,
+    pub clear_nmi_interrupt: bool,
 }
 
 impl NesPPU {
@@ -49,6 +50,7 @@ impl NesPPU {
             cycles: 0,
             scanline: 0,
             nmi_interrupt: None,
+            clear_nmi_interrupt: false,
         }
     }
 
@@ -141,6 +143,8 @@ impl NesPPU {
         } else {
             self.scroll.reset();
             let bits = self.status.bits();
+            self.status.reset_vblank_status();
+            self.clear_nmi_interrupt = true;
             bits
         }
     }
@@ -417,7 +421,7 @@ bitflags! {
     const PPU_OPEN_BUS2       = 0b0000_0010;
     const PPU_OPEN_BUS3       = 0b0000_0100;
     const PPU_OPEN_BUS4       = 0b0000_1000;
-    const PPU_OPEN_BUS5       = 0b0001_0000;
+    const PPU_OPEN_BUS5       = 0b0001_0000; // VRAM状態
     const SPRITE_OVERFLOW     = 0b0010_0000;
     const SPRITE_ZERO_HIT     = 0b0100_0000;
     const VBLANK_HAS_STARTED  = 0b1000_0000;
