@@ -585,16 +585,14 @@ impl<'a> CPU<'a> {
     }
 
     pub fn _push_u16(&mut self, value: u16) {
-        let addr = 0x0100 + self.stack_pointer.wrapping_sub(1) as u16;
-        self.mem_write_u16(addr, value);
-        self.stack_pointer = self.stack_pointer.wrapping_sub(2);
+        self._push((value >> 8) as u8);
+        self._push((value & 0x00FF) as u8);
     }
 
     pub fn _pop_u16(&mut self) -> u16 {
-        let addr = 0x0100 + self.stack_pointer.wrapping_add(1) as u16;
-        let value = self.mem_read_u16(addr);
-        self.stack_pointer = self.stack_pointer.wrapping_add(2);
-        value
+        let lo = self._pop();
+        let hi = self._pop();
+        ((hi as u16) << 8) | lo as u16
     }
 
     pub fn jmp(&mut self, mode: &AddressingMode) {
