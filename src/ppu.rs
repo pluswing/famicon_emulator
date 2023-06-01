@@ -30,6 +30,12 @@ pub struct NesPPU {
     scanline: usize,
     pub nmi_interrupt: Option<i32>,
     pub clear_nmi_interrupt: bool,
+
+    // 描画中にパレットテーブルを書き換えることが可能なので、その対応。
+    // 書き込まれた時点でのscanlineとその時のパレットのスナップショットを持っておき、
+    // レンダリング時に、その履歴を参照して描画することで実現。
+    pub scanline_palette_indexes: Vec<usize>,
+    pub scanline_palette_tables: Vec<[u8; 32]>,
 }
 
 impl NesPPU {
@@ -51,6 +57,8 @@ impl NesPPU {
             scanline: 0,
             nmi_interrupt: None,
             clear_nmi_interrupt: false,
+            scanline_palette_indexes: vec![],
+            scanline_palette_tables: vec![],
         }
     }
 
@@ -115,6 +123,51 @@ impl NesPPU {
         }
     }
 
+    fn write_palette_table(&mut self, addr: u16, value: u8) {
+        let addr = self.mirror_palette_addr(addr) as usize;
+
+        // palette_tableには最新情報を入れておく。
+        self.palette_table[addr] = value;
+
+        let scanline = self.scanline;
+        let last_scanline = self.scanline_palette_indexes.last().unwrap_or(&0);
+        if *last_scanline != scanline {
+            self.scanline_palette_indexes.push(scanline);
+            self.scanline_palette_tables
+                .push(self.palette_table.clone());
+        } else {
+            self.scanline_palette_tables.pop();
+            self.scanline_palette_tables
+                .push(self.palette_table.clone());
+        }
+    }
+
+    fn clear_palette_table_histories(&mut self) {
+        self.scanline_palette_indexes = vec![];
+        self.scanline_palette_tables = vec![];
+    }
+
+    pub fn read_palette_table(&self, scanline: usize) -> &[u8; 32] {
+        if self.scanline_palette_indexes.is_empty() {
+            return &self.palette_table;
+        }
+
+        let mut index = 0;
+        for (i, s) in self.scanline_palette_indexes.iter().enumerate() {
+            if *s > scanline {
+                break;
+            }
+            index = i
+        }
+
+        info!("RPT SL={}, INDEX={}", scanline, index);
+
+        let table = &self.scanline_palette_tables[index];
+
+        info!("  => {:?}", table);
+
+        table
+    }
 
     fn mirror_palette_addr(&self, addr: u16) -> u16 {
         // see: https://taotao54321.hatenablog.com/entry/2017/04/11/115205
@@ -275,6 +328,7 @@ impl NesPPU {
                 self.status.set_sprite_zero_hit(false);
                 self.status.reset_vblank_status();
                 self.nmi_interrupt = None;
+                self.clear_palette_table_histories();
                 return true;
             }
 

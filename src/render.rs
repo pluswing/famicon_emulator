@@ -1,3 +1,5 @@
+use log::{debug, info};
+
 use crate::frame::Frame;
 use crate::palette;
 use crate::ppu::NesPPU;
@@ -74,7 +76,7 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
         let flip_vertical = (attr >> 7 & 1) == 1;
         let flip_horizontal = (attr >> 6 & 1) == 1;
         let palette_idx = attr & 0b11;
-        let sprite_palette = sprite_palette(ppu, palette_idx);
+        let sprite_palette = sprite_palette(ppu, tile_y, palette_idx);
 
         let bank: u16 = ppu.ctrl.sprite_pattern_addr();
 
@@ -125,22 +127,19 @@ fn bg_pallette(
     };
 
     let pallette_start: usize = 1 + (pallet_idx as usize) * 4;
+    let p = ppu.read_palette_table(tile_row * 8);
     [
-        ppu.palette_table[0],
-        ppu.palette_table[pallette_start],
-        ppu.palette_table[pallette_start + 1],
-        ppu.palette_table[pallette_start + 2],
+        p[0],
+        p[pallette_start],
+        p[pallette_start + 1],
+        p[pallette_start + 2],
     ]
 }
 
-fn sprite_palette(ppu: &NesPPU, palette_idx: u8) -> [u8; 4] {
+fn sprite_palette(ppu: &NesPPU, tile_y: usize, palette_idx: u8) -> [u8; 4] {
     let start = 0x11 + (palette_idx * 4) as usize;
-    [
-        0,
-        ppu.palette_table[start],
-        ppu.palette_table[start + 1],
-        ppu.palette_table[start + 2],
-    ]
+    let p = ppu.read_palette_table(tile_y);
+    [0, p[start], p[start + 1], p[start + 2]]
 }
 
 fn render_name_table(
@@ -171,7 +170,7 @@ fn render_name_table(
                 upper = upper >> 1;
                 lower = lower >> 1;
                 let rgb = match value {
-                    0 => palette::SYSTEM_PALLETE[ppu.palette_table[0] as usize],
+                    0 => palette::SYSTEM_PALLETE[palette[0] as usize],
                     1 => palette::SYSTEM_PALLETE[palette[1] as usize],
                     2 => palette::SYSTEM_PALLETE[palette[2] as usize],
                     3 => palette::SYSTEM_PALLETE[palette[3] as usize],
