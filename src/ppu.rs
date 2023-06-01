@@ -89,10 +89,40 @@ impl NesPPU {
                 );
                 self.vram[self.mirror_vram_addr(addr) as usize] = value;
             }
-            0x3F00..=0x3FFF => {
-                self.palette_table[(addr - 0x3F00) as usize] = value;
+            0x3F00..=0x3F1F => {
+                debug!(
+                    "WRITE PALATTE {:04X} {:02X} => ({:02X}) SL={}",
+                    addr,
+                    self.mirror_palette_addr(addr) as usize,
+                    value,
+                    self.scanline
+                );
+                self.write_palette_table(addr, value)
+            }
+            0x3F20..=0x3FFF => {
+                debug!(
+                    "WRITE PALATTE MIRROR {:04X} {:02X} => ({:02X}) SL={}",
+                    addr,
+                    self.mirror_palette_addr(addr) as usize,
+                    value,
+                    self.scanline
+                );
+                self.write_palette_table(addr, value)
             }
             _ => panic!("unexpected access to mirrored space {}", addr),
+        }
+    }
+
+
+    fn mirror_palette_addr(&self, addr: u16) -> u16 {
+        // see: https://taotao54321.hatenablog.com/entry/2017/04/11/115205
+        let addr = addr & 0x1F;
+        match addr {
+            0x10 => 0x00,
+            0x14 => 0x04,
+            0x18 => 0x08,
+            0x1C => 0x0C,
+            _ => addr,
         }
     }
 
@@ -177,12 +207,23 @@ impl NesPPU {
                     result
                 }
             }
+            0x3F00..=0x3F1F => {
+                if unsafe { IN_TRACE } {
+                    self.internal_data_buf
+                } else {
+                    self.internal_data_buf =
+                        self.palette_table[self.mirror_palette_addr(addr) as usize];
+                    self.internal_data_buf
+                }
+            }
+            0x3F20..=0x3FFF => {
+                // TODO
+                0
             }
             0x3000..=0x3EFF => panic!(
                 "addr space 0x3000..0x3EFF is not expected to be used, requested = {} ",
                 addr,
             ),
-            0x3F00..=0x3FFF => self.palette_table[(addr - 0x3F00) as usize],
             _ => panic!("unexpected access to mirrored space {}", addr),
         }
     }
