@@ -5,13 +5,14 @@ use crate::{cpu::IN_TRACE, rom::Mirroring};
 
 pub struct NesPPU {
     pub chr_rom: Vec<u8>,
+    pub mirroring: Mirroring,
+    pub is_chr_ram: bool,
+
     pub palette_table: [u8; 32],
     pub vram: [u8; 2048],
 
     pub oam_addr: u8,
     pub oam_data: [u8; 256],
-
-    pub mirroring: Mirroring,
 
     addr: AddrRegister,        // 0x2006 (0x2007)
     pub ctrl: ControlRegister, // 0x2000
@@ -39,10 +40,11 @@ pub struct NesPPU {
 }
 
 impl NesPPU {
-    pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring) -> Self {
+    pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring, is_chr_ram: bool) -> Self {
         NesPPU {
             chr_rom: chr_rom,
             mirroring: mirroring,
+            is_chr_ram: is_chr_ram,
             vram: [0; 2048],
             oam_data: [0; 64 * 4],
             oam_addr: 0,
@@ -78,8 +80,9 @@ impl NesPPU {
             0..=0x1FFF => {
                 // FIXME
                 debug!("write CHR_ROM {:04X} => {:02X}", addr, value);
-                // self.chr_rom[addr as usize] = value;
-                // self.vram[self.mirror_vram_addr(addr) as usize] = value;
+                if self.is_chr_ram {
+                    self.chr_rom[addr as usize] = value;
+                }
             }
             0x2000..=0x2FFF => {
                 trace!(
