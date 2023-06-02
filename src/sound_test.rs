@@ -36,6 +36,43 @@ impl AudioCallback for SquareWave {
     }
 }
 
+// ノイズ
+struct NoiseRandom {
+    // ランダム生成モードフラグがセットされていればショートモード、 クリアされていればロングモードとなります。 ショートモードの時のビットシーケンスは93ビット、 ロングモードの時は32767ビットです。
+    bit: u8,
+    cycle: u32,
+    cycle_counter: u32,
+
+    value: u16,
+}
+
+impl NoiseRandom {
+    pub fn new() -> Self {
+        NoiseRandom {
+            bit: 1,
+            cycle: 32767,
+            cycle_counter: 0,
+            value: 1,
+        }
+    }
+
+    pub fn next(&mut self) -> bool {
+        // 15ビットシフトレジスタにはリセット時に1をセットしておく必要があります。 タイマによってシフトレジスタが励起されるたびに1ビット右シフトし、 ビット14には、ショートモード時にはビット0とビット6のEORを、 ロングモード時にはビット0とビット1のEORを入れます。
+        if self.cycle_counter >= self.cycle {
+            self.value = 1;
+        }
+        self.cycle_counter += 1;
+
+        // ロングモード時にはビット0とビット1のEORを入れます。
+        let b = (self.value & 0x01) ^ ((self.value >> self.bit) & 0x01);
+        self.value = self.value >> 1;
+        self.value = self.value & 0b01_1111_1111_1111 | b << 14;
+
+        // シフトレジスタのビット0が1なら、チャンネルの出力は0となります。
+        self.value & 0x01 != 0
+    }
+}
+
 fn main() {
     let sdl_context = sdl2::init().unwrap();
     let audio_subsystem = sdl_context.audio().unwrap();

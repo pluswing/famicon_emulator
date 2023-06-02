@@ -23,10 +23,10 @@ impl NesAPU {
         self.ch1_register.write(addr, value);
 
         let duty = match self.ch1_register.duty() {
-            0 => 0.125,
-            1 => 0.25,
-            2 => 0.50,
-            3 => 0.75,
+            0x00 => 0.125,
+            0x01 => 0.25,
+            0x02 => 0.50,
+            0x03 => 0.75,
             _ => panic!(
                 "can't be {} {:02X}",
                 self.ch1_register.duty(),
