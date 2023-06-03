@@ -83,7 +83,7 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
     render_name_table(
         ppu,
         frame,
-        main_name_table,
+        second_name_table,
         Rect::new(0, scroll_y, scroll_x, screen_h),
         (screen_w - scroll_x) as isize,
         -(scroll_y as isize),
