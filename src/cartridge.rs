@@ -29,4 +29,8 @@ pub mod test {
     pub fn alter_ego_rom() -> Rom {
         load_rom("rom/Alter_Ego.nes")
     }
+
+    pub fn dq3_rom() -> Rom {
+        load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes")
+    }
 }

@@ -1,9 +1,10 @@
 use bitflags::bitflags;
 use log::{debug, info, trace};
 
-use crate::{cpu::IN_TRACE, rom::Mirroring};
+use crate::{cpu::IN_TRACE, mapper::Mapper3, rom::Mirroring};
 
-pub struct NesPPU {
+pub struct NesPPU<'call> {
+    pub mapper: &'call mut Mapper3,
     pub chr_rom: Vec<u8>,
     pub mirroring: Mirroring,
     pub is_chr_ram: bool,
@@ -39,9 +40,15 @@ pub struct NesPPU {
     pub scanline_palette_tables: Vec<[u8; 32]>,
 }
 
-impl NesPPU {
-    pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring, is_chr_ram: bool) -> Self {
+impl<'call> NesPPU<'call> {
+    pub fn new(
+        mapper: &'call mut Mapper3,
+        chr_rom: Vec<u8>,
+        mirroring: Mirroring,
+        is_chr_ram: bool,
+    ) -> Self {
         NesPPU {
+            mapper: mapper,
             chr_rom: chr_rom,
             mirroring: mirroring,
             is_chr_ram: is_chr_ram,
@@ -247,7 +254,8 @@ impl NesPPU {
                     self.internal_data_buf
                 } else {
                     let result = self.internal_data_buf;
-                    self.internal_data_buf = self.chr_rom[addr as usize];
+                    let mapped_addr = self.mapper.mirror_chr_rom_addr(addr);
+                    self.internal_data_buf = self.chr_rom[mapped_addr as usize];
                     result
                 }
             }
