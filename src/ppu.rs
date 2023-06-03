@@ -269,7 +269,7 @@ impl NesPPU {
                     result
                 }
             }
-            0x3F00..=0x3F1F => {
+            0x3F00..=0x3FFF => {
                 if unsafe { IN_TRACE } {
                     self.internal_data_buf
                 } else {
@@ -277,10 +277,6 @@ impl NesPPU {
                         self.palette_table[self.mirror_palette_addr(addr) as usize];
                     self.internal_data_buf
                 }
-            }
-            0x3F20..=0x3FFF => {
-                // TODO
-                0
             }
             _ => panic!("unexpected access to mirrored space {}", addr),
         }
