@@ -1,4 +1,4 @@
-use log::debug;
+use log::{debug, info, trace};
 
 use crate::opscodes::{call, CPU_OPS_CODES};
 
@@ -264,26 +264,7 @@ impl<'a> CPU<'a> {
             match op {
                 Some(op) => {
                     self.add_cycles = 0;
-                    /*
-                                        if op.bytes == 1 {
-                                            debug!("OP: {} {:?}", op.name, op.addressing_mode);
-                                        } else if op.bytes == 2 {
-                                            debug!(
-                                                "OP: {} {:02X} {:?}",
-                                                op.name,
-                                                self.mem_read(self.program_counter),
-                                                op.addressing_mode
-                                            );
-                                        } else if op.bytes == 3 {
-                                            debug!(
-                                                "OP: {} {:02X}{:02X} {:?}",
-                                                op.name,
-                                                self.mem_read(self.program_counter),
-                                                self.mem_read(self.program_counter + 1),
-                                                op.addressing_mode
-                                            );
-                                        }
-                    */
+
                     callback(self);
                     call(self, &op);
 
@@ -314,6 +295,7 @@ impl<'a> CPU<'a> {
     }
 
     fn interrupt_nmi(&mut self) {
+        debug!("** INTERRUPT_NMI **");
         self._push_u16(self.program_counter);
         let mut status = self.status;
         status = status & !FLAG_BREAK;
@@ -574,6 +556,7 @@ impl<'a> CPU<'a> {
 
     pub fn _push(&mut self, value: u8) {
         let addr = 0x0100 + self.stack_pointer as u16;
+        trace!("STACK PUSH: {:04X} => {:02X}", self.stack_pointer, value);
         self.mem_write(addr, value);
         self.stack_pointer = self.stack_pointer.wrapping_sub(1);
     }
@@ -581,6 +564,7 @@ impl<'a> CPU<'a> {
     pub fn _pop(&mut self) -> u8 {
         self.stack_pointer = self.stack_pointer.wrapping_add(1);
         let addr = 0x0100 + self.stack_pointer as u16;
+        trace!("STACK POP: {:02X}", self.stack_pointer);
         self.mem_read(addr)
     }
 
@@ -976,15 +960,20 @@ pub fn trace(cpu: &mut CPU) -> String {
     let asm = disasm(program_counter, &ops, &args);
     let memacc = memory_access(cpu, &ops, &args);
     let status = cpu2str(cpu);
-    unsafe { IN_TRACE = false };
 
-    format!(
+    let log = format!(
         "{:<6}{:<9}{:<33}{}",
         pc,
         bin,
         vec![asm, memacc].join(" "),
         status
-    )
+    );
+
+    trace!("{}", log);
+
+    unsafe { IN_TRACE = false };
+
+    log
 }
 
 fn binary(op: u8, args: &Vec<u8>) -> String {

@@ -13,7 +13,7 @@ mod ppu;
 mod render;
 mod rom;
 
-use crate::cpu::trace;
+use crate::cpu::{trace, IN_TRACE};
 
 use self::bus::{Bus, Mem};
 use self::cpu::CPU;
@@ -23,7 +23,7 @@ use cartridge::load_rom;
 use cartridge::test::{alter_ego_rom, mario_rom, test_rom};
 use frame::{show_tile, Frame};
 use joypad::Joypad;
-use log::{debug, info, trace};
+use log::{debug, info, log_enabled, trace, Level};
 use ppu::NesPPU;
 use rand::Rng;
 use sdl2::event::Event;
@@ -32,9 +32,20 @@ use sdl2::pixels::Color;
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::EventPump;
 use std::collections::HashMap;
+use std::io::Write;
 
 fn main() {
-    env_logger::init();
+    env_logger::builder()
+        .format(|buf, record| {
+            let style = buf.style();
+            if unsafe { IN_TRACE } {
+                writeln!(buf, "[TRACE] {}", style.value(record.args()))
+            } else {
+                writeln!(buf, "        {}", style.value(record.args()))
+            }
+        })
+        .format_timestamp(None)
+        .init();
 
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -100,7 +111,9 @@ fn main() {
 
     cpu.reset();
     cpu.run_with_callback(move |cpu| {
-        trace!("{}", trace(cpu));
+        if log_enabled!(Level::Trace) {
+            trace(cpu);
+        }
     });
 
     /*

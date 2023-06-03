@@ -87,7 +87,7 @@ impl Mem for Bus<'_> {
                 let mirror_down_addr = addr & 0b_0000_0111_1111_1111;
                 let v = self.cpu_vram[mirror_down_addr as usize];
                 trace!(
-                    "RAM READ {:04X} => {:04X} ({:02X})",
+                    "RAM READ: {:04X} => {:04X} ({:02X})",
                     addr,
                     mirror_down_addr,
                     v
@@ -103,6 +103,7 @@ impl Mem for Bus<'_> {
             0x2007 => self.ppu.read_data(),
             0x2008..=PPU_REGISTERS_MIRRORS_END => {
                 let mirror_down_addr = addr & 0b00100000_00000111;
+                debug!("READ PPU MIRROR: {:04X} => {:04X}", addr, mirror_down_addr);
                 self.mem_read(mirror_down_addr)
             }
             0x4016 => self.joypad1.read(),
@@ -121,7 +122,7 @@ impl Mem for Bus<'_> {
                 let mirror_down_addr = addr & 0b_0000_0111_1111_1111;
                 self.cpu_vram[mirror_down_addr as usize] = data;
                 trace!(
-                    "RAM WRITE {:04X} => {:04X} ({:02X})",
+                    "RAM WRITE: {:04X} => {:04X} ({:02X})",
                     addr,
                     mirror_down_addr,
                     data

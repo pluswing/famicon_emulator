@@ -73,8 +73,7 @@ impl NesPPU {
         if !unsafe { IN_TRACE } {
             self.increment_vram_addr();
         }
-
-        //        debug!("WRITE PPU: {:04X} {:02X}", addr, value);
+        debug!("WRITE PPU: {:04X} => {:02X}", addr, value);
 
         match addr {
             0..=0x1FFF => {
@@ -162,13 +161,7 @@ impl NesPPU {
             }
             index = i
         }
-
-        info!("RPT SL={}, INDEX={}", scanline, index);
-
         let table = &self.scanline_palette_tables[index];
-
-        info!("  => {:?}", table);
-
         table
     }
 
