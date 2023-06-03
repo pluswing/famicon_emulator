@@ -688,9 +688,11 @@ impl<'a> CPU<'a> {
             if self.status & flag != 0 {
                 // (+1 if branch succeeds
                 //  +2 if to a new page)
+                //    => new pageの場合は、+1っぽい。
+                //     https://pgate1.at-ninja.jp/NES_on_FPGA/nes_cpu.htm#clock
                 self.add_cycles += 1;
-                if self.program_counter & 0xFF00 != addr & 0xFF00 {
-                    self.add_cycles += 2;
+                if (self.program_counter & 0xFF00) != (addr & 0xFF00) {
+                    self.add_cycles += 1;
                 }
                 self.program_counter = addr
             }
@@ -699,8 +701,8 @@ impl<'a> CPU<'a> {
                 // (+1 if branch succeeds
                 //  +2 if to a new page)
                 self.add_cycles += 1;
-                if self.program_counter & 0xFF00 != addr & 0xFF00 {
-                    self.add_cycles += 2;
+                if (self.program_counter & 0xFF00) != (addr & 0xFF00) {
+                    self.add_cycles += 1;
                 }
                 self.program_counter = addr
             }
