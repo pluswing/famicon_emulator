@@ -107,7 +107,11 @@ impl Mem for Bus<'_> {
                 self.mem_read(mirror_down_addr)
             }
             0x4016 => self.joypad1.read(),
-            0x4017 => self.joypad2.read(),
+            0x4017 => {
+                // readはjoypad2になるらしいが、writeはAPUらしい。。
+                // self.joypad2.read()
+                0
+            }
             PRG_ROM..=PRG_ROM_END => self.read_prg_rom(addr),
             _ => {
                 warn!("Ignoreing mem access at {:X}", addr);
@@ -174,9 +178,18 @@ impl Mem for Bus<'_> {
             }
             0x4016 => {
                 self.joypad1.write(data);
+                // TODO 2Pの書き込みもここでやるのかな？
+                // self.joypad2.write(data);
             }
             0x4017 => {
-                self.joypad2.write(data);
+                // self.joypad2.write(data);
+                // 書き込みは、joypadではなく、APUになる。
+                //   APUフレームカウンター
+                //   https://www.nesdev.org/wiki/APU_Frame_Counter
+                if (data & 0xC0) == 0 {
+                    //
+                }
+                info!("WRITE ACCESS 0x4017. {:02X}", data);
             }
             0x4014 => {
                 // $XX を書き込むと、256 バイトのデータが CPU ページ $XX00 ～ $XXFF から内部 PPU OAM にアップロードされます。このページは通常、内部 RAM (通常は $0200 ～ $02FF) にありますが、カートリッジ RAM または ROM も使用できます。
