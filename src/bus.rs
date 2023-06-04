@@ -1,37 +1,31 @@
 use crate::joypad::Joypad;
 use crate::ppu::NesPPU;
 use crate::rom::Rom;
-use crate::{apu::NesAPU, mapper::Mapper3};
+use crate::MAPPER;
+use crate::{apu::NesAPU, mapper::Mapper};
 use log::{debug, error, info, log_enabled, trace, warn, Level};
 
 pub struct Bus<'call> {
     cpu_vram: [u8; 2048],
     prg_rom: Vec<u8>,
-    ppu: NesPPU<'call>,
+    ppu: NesPPU,
     joypad1: Joypad,
     joypad2: Joypad,
     apu: NesAPU,
 
     cycles: usize,
     gameloop_callback: Box<dyn FnMut(&NesPPU, &mut Joypad) + 'call>,
-    mapper: &'call mut Mapper3,
 }
 
 impl<'call> Bus<'call> {
-    pub fn new<F>(
-        mapper: &'call mut Mapper3,
-        rom: Rom,
-        apu: NesAPU,
-        gameloop_callback: F,
-    ) -> Bus<'call>
+    pub fn new<F>(rom: Rom, apu: NesAPU, gameloop_callback: F) -> Bus<'call>
     where
         F: FnMut(&NesPPU, &mut Joypad) + 'call,
     {
-        let ppu = NesPPU::new(mapper, rom.chr_rom, rom.screen_mirroring, rom.is_chr_ram);
+        let ppu = NesPPU::new(rom.chr_rom, rom.screen_mirroring, rom.is_chr_ram);
         Bus {
             cpu_vram: [0; 2048],
             prg_rom: rom.prg_rom,
-            mapper: mapper,
             ppu: ppu,
             joypad1: Joypad::new(),
             joypad2: Joypad::new(),
@@ -41,14 +35,10 @@ impl<'call> Bus<'call> {
         }
     }
 
-    fn read_prg_rom(&self, mut addr: u16) -> u8 {
-        addr = self.mapper.mirror_prg_rom_addr(addr);
-        addr -= 0x8000;
-        if self.prg_rom.len() == 0x4000 && addr >= 0x4000 {
-            // mirror if needed
-            addr = addr % 0x4000;
-        }
-        self.prg_rom[addr as usize]
+    fn read_prg_rom(&self, addr: u16) -> u8 {
+        let mut mirrored = MAPPER.lock().unwrap().mirror_prg_rom_addr(addr as usize);
+        mirrored -= 0x8000;
+        self.prg_rom[mirrored]
     }
 
     pub fn tick(&mut self, cycles: u8) {
@@ -102,10 +92,14 @@ impl Mem for Bus<'_> {
                 );
                 v
             }
-            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 | 0x4014 => {
+            // 0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 | 0x4014 => {
+            0x2003 | 0x2005 | 0x2006 | 0x4014 => {
                 warn!("Attempt to read from write-only PPU address {:X}", addr);
                 0
             }
+            // DQ3やSMBは 0x2000 | 0x2001 にアクセスするのでその対応。
+            0x2000 => self.ppu.read_ctrl(),
+            0x2001 => self.ppu.read_mask(),
             0x2002 => self.ppu.read_status(),
             0x2004 => self.ppu.read_oam_data(),
             0x2007 => self.ppu.read_data(),
@@ -212,7 +206,7 @@ impl Mem for Bus<'_> {
                 }
             }
             PRG_ROM..=PRG_ROM_END => {
-                self.mapper.write(addr, data);
+                MAPPER.lock().unwrap().write(addr, data);
                 // warn!("Attempt to write to Cartrige ROM space")
             }
             _ => {

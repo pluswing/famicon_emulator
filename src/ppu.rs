@@ -1,10 +1,10 @@
 use bitflags::bitflags;
 use log::{debug, info, trace};
 
-use crate::{cpu::IN_TRACE, mapper::Mapper3, rom::Mirroring};
+use crate::mapper::Mapper;
+use crate::{cpu::IN_TRACE, rom::Mirroring, MAPPER};
 
-pub struct NesPPU<'call> {
-    pub mapper: &'call mut Mapper3,
+pub struct NesPPU {
     pub chr_rom: Vec<u8>,
     pub mirroring: Mirroring,
     pub is_chr_ram: bool,
@@ -40,15 +40,9 @@ pub struct NesPPU<'call> {
     pub scanline_palette_tables: Vec<[u8; 32]>,
 }
 
-impl<'call> NesPPU<'call> {
-    pub fn new(
-        mapper: &'call mut Mapper3,
-        chr_rom: Vec<u8>,
-        mirroring: Mirroring,
-        is_chr_ram: bool,
-    ) -> Self {
+impl NesPPU {
+    pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring, is_chr_ram: bool) -> Self {
         NesPPU {
-            mapper: mapper,
             chr_rom: chr_rom,
             mirroring: mirroring,
             is_chr_ram: is_chr_ram,
@@ -192,6 +186,14 @@ impl<'call> NesPPU<'call> {
         }
     }
 
+    pub fn read_ctrl(&self) -> u8 {
+        self.ctrl.bits()
+    }
+
+    pub fn read_mask(&self) -> u8 {
+        self.mask.bits()
+    }
+
     pub fn read_status(&mut self) -> u8 {
         // スクロール ($2005)  PPUSTATUSを読み取ってアドレス ラッチをリセットした後
         if unsafe { IN_TRACE } {
@@ -228,9 +230,10 @@ impl<'call> NesPPU<'call> {
     }
 
     pub fn write_to_oam_dma(&mut self, values: [u8; 256]) {
-        debug!("OAM DMA: ADDR:{:02X}", self.oam_addr);
-        debug!("{:?}", values);
-        self.oam_data = values;
+        let base = self.oam_addr as usize;
+        // OAM ADDRに0以外が設定されている場合、その値以降のデータが反映対象になる。
+        debug!("OAM DMA OFFSET={:02X}", base);
+        self.oam_data[base..256].copy_from_slice(&values[base..256]);
     }
 
     pub fn write_to_scroll(&mut self, value: u8) {
@@ -254,8 +257,8 @@ impl<'call> NesPPU<'call> {
                     self.internal_data_buf
                 } else {
                     let result = self.internal_data_buf;
-                    let mapped_addr = self.mapper.mirror_chr_rom_addr(addr);
-                    self.internal_data_buf = self.chr_rom[mapped_addr as usize];
+                    let mapped_addr = MAPPER.lock().unwrap().mirror_chr_rom_addr(addr as usize);
+                    self.internal_data_buf = self.chr_rom[mapped_addr];
                     result
                 }
             }

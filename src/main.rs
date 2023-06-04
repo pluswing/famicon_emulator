@@ -16,7 +16,7 @@ mod rom;
 
 use crate::cartridge::test::dq3_rom;
 use crate::cpu::{trace, IN_TRACE};
-use crate::mapper::Mapper3;
+use crate::mapper::{mapper_from_rom, Mapper0, Mapper1};
 
 use self::bus::{Bus, Mem};
 use self::cpu::CPU;
@@ -27,6 +27,7 @@ use cartridge::test::{alter_ego_rom, mario_rom, test_rom};
 use frame::{show_tile, Frame};
 use joypad::Joypad;
 use log::{debug, info, log_enabled, trace, Level};
+use mapper::Mapper;
 use ppu::NesPPU;
 use rand::Rng;
 use sdl2::event::Event;
@@ -36,6 +37,11 @@ use sdl2::pixels::PixelFormatEnum;
 use sdl2::EventPump;
 use std::collections::HashMap;
 use std::io::Write;
+use std::sync::Mutex;
+
+lazy_static! {
+    pub static ref MAPPER: Mutex::<Box<Mapper1>> = Mutex::new(Box::new(Mapper1::new(256 * 1024)));
+}
 
 fn main() {
     env_logger::builder()
@@ -81,9 +87,9 @@ fn main() {
     // let rom = alter_ego_rom();
     // let rom = load_rom("rom/ppu/vbl_nmi_timing/3.even_odd_frames.nes");
     let rom = load_rom("rom/nes-test-roms/cpu_exec_space/test_cpu_exec_space_ppuio.nes");
-    let rom = load_rom("rom/Championship Lode Runner (Japan).nes");
     let rom = mario_rom();
     let rom = load_rom("rom/nes-test-roms/blargg_litewall/blargg_litewall-10c.nes");
+    let rom = load_rom("rom/Championship Lode Runner (Japan).nes");
     let rom = dq3_rom();
 
     info!(
@@ -97,40 +103,34 @@ fn main() {
 
     let mut frame = Frame::new();
     let apu = NesAPU::new(&sdl_context);
-    let mut mapper = Mapper3::new();
-    let bus = Bus::new(
-        &mut mapper,
-        rom,
-        apu,
-        move |ppu: &NesPPU, joypad1: &mut Joypad| {
-            render::render(ppu, &mut frame);
-            texture.update(None, &frame.data, 256 * 3).unwrap();
+    let bus = Bus::new(rom, apu, move |ppu: &NesPPU, joypad1: &mut Joypad| {
+        render::render(ppu, &mut frame);
+        texture.update(None, &frame.data, 256 * 3).unwrap();
 
-            canvas.copy(&texture, None, None).unwrap();
+        canvas.copy(&texture, None, None).unwrap();
 
-            canvas.present();
-            for event in event_pump.poll_iter() {
-                match event {
-                    Event::Quit { .. }
-                    | Event::KeyDown {
-                        keycode: Some(Keycode::Escape),
-                        ..
-                    } => std::process::exit(0),
-                    Event::KeyDown { keycode, .. } => {
-                        if let Some(key) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
-                            joypad1.set_button_pressed_status(*key, true);
-                        }
+        canvas.present();
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => std::process::exit(0),
+                Event::KeyDown { keycode, .. } => {
+                    if let Some(key) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
+                        joypad1.set_button_pressed_status(*key, true);
                     }
-                    Event::KeyUp { keycode, .. } => {
-                        if let Some(key) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
-                            joypad1.set_button_pressed_status(*key, false);
-                        }
-                    }
-                    _ => { /* do nothing */ }
                 }
+                Event::KeyUp { keycode, .. } => {
+                    if let Some(key) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
+                        joypad1.set_button_pressed_status(*key, false);
+                    }
+                }
+                _ => { /* do nothing */ }
             }
-        },
-    );
+        }
+    });
 
     let mut cpu = CPU::new(bus);
 
