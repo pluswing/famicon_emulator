@@ -3,35 +3,42 @@ use std::sync::mpsc::{channel, Receiver};
 use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq)]
-struct SquareNote {
+struct NoiseNote {
     hz: f32,
+    is_long: bool,
     volume: f32,
-    duty: f32,
 }
 
-struct SquareWave {
+struct NoiseWave {
     freq: f32,
     phase: f32,
-    receiver: Receiver<SquareNote>,
-    note: SquareNote,
+    receiver: Receiver<NoiseNote>,
+    note: NoiseNote,
+    longRandom: NoiseRandom,
+    shortRandom: NoiseRandom,
 }
 
-impl AudioCallback for SquareWave {
+impl AudioCallback for NoiseWave {
     type Channel = f32;
 
-    fn callback(&mut self, out: &mut [f32]) {
+    fn callback(&mut self, out: &mut [Self::Channel]) {
+        let mut v = false;
         for x in out.iter_mut() {
             let res = self.receiver.recv_timeout(Duration::from_millis(0));
             match res {
                 Ok(note) => self.note = note,
                 Err(_) => {}
             }
-            *x = if self.phase <= self.note.duty {
-                self.note.volume
-            } else {
-                -self.note.volume
-            };
+
+            *x = if v { 0.0 } else { 1.0 } * self.note.volume;
+
+            let last_phase = self.phase;
             self.phase = (self.phase + self.note.hz / self.freq) % 1.0;
+            if last_phase > self.phase {
+                // TODO is_long
+                v = self.longRandom.next();
+                println!("NEXT {}", v);
+            }
         }
     }
 }
@@ -67,6 +74,7 @@ impl NoiseRandom {
         let b = (self.value & 0x01) ^ ((self.value >> self.bit) & 0x01);
         self.value = self.value >> 1;
         self.value = self.value & 0b01_1111_1111_1111 | b << 14;
+        println!("R: {:04X} C: {} b: {}", self.value, self.cycle_counter, b);
 
         // シフトレジスタのビット0が1なら、チャンネルの出力は0となります。
         self.value & 0x01 != 0
@@ -77,7 +85,7 @@ fn main() {
     let sdl_context = sdl2::init().unwrap();
     let audio_subsystem = sdl_context.audio().unwrap();
 
-    let (sender, receiver) = channel::<SquareNote>();
+    let (sender, receiver) = channel::<NoiseNote>();
 
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
@@ -86,39 +94,21 @@ fn main() {
     };
 
     let device = audio_subsystem
-        .open_playback(None, &desired_spec, |spec| SquareWave {
+        .open_playback(None, &desired_spec, |spec| NoiseWave {
             freq: spec.freq as f32,
             phase: 0.0,
             receiver: receiver,
-            note: SquareNote {
-                hz: 261.626,
+            longRandom: NoiseRandom::new(),
+            shortRandom: NoiseRandom::new(), // FIXME
+            note: NoiseNote {
+                hz: 1789772.5 / 0x7f as f32,
+                is_long: true,
                 volume: 0.25,
-                duty: 0.25,
             },
         })
         .unwrap();
 
     device.resume();
-
-    std::thread::sleep(Duration::from_millis(2000));
-
-    sender
-        .send(SquareNote {
-            hz: 293.665,
-            volume: 0.25,
-            duty: 0.125,
-        })
-        .unwrap();
-
-    std::thread::sleep(Duration::from_millis(2000));
-
-    sender
-        .send(SquareNote {
-            hz: 329.628,
-            volume: 0.25,
-            duty: 0.125,
-        })
-        .unwrap();
 
     std::thread::sleep(Duration::from_millis(2000));
 }
