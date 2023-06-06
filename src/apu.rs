@@ -46,6 +46,12 @@ impl NesAPU {
             })
             .unwrap();
     }
+
+    pub fn write4ch(&mut self, addr: u16, value: u8) {
+        self.ch4_register.write(addr, value);
+
+        // TODO
+    }
 }
 
 struct Ch1Register {
@@ -92,6 +98,53 @@ impl Ch1Register {
             }
             0x4003 => {
                 self.hz_high_key_on = value;
+            }
+            _ => panic!("can't be"),
+        }
+    }
+}
+
+enum NoizeKind {
+    Long,
+    Short,
+}
+
+struct Ch4Register {
+    // 400C
+    volume: u8,
+    envelope_flag: bool,
+    key_off_counter_flag: bool,
+
+    // 400E
+    hz: u8,
+    kind: NoizeKind,
+
+    // 400F
+    key_off_count: u8,
+}
+
+impl Ch4Register {
+    pub fn new() -> Self {
+        Ch4Register {
+            volume: 0,
+            envelope_flag: false,
+            key_off_counter_flag: false,
+            hz: 0,
+            kind: NoizeKind::Long,
+            key_off_count: 0,
+        }
+    }
+
+    pub fn write(&mut self, addr: u16, value: u8) {
+        match addr {
+            0x400C => {
+                // TODO
+            }
+            0x400E => {
+                // TODO
+            }
+            0x400F => {
+                // TODO
             }
             _ => panic!("can't be"),
         }
