@@ -421,9 +421,7 @@ impl ControlRegister {
     }
 
     pub fn generate_vblank_nmi(&mut self) -> bool {
-        let result = self.contains(ControlRegister::GENERATE_NMI);
-        self.set(ControlRegister::GENERATE_NMI, true);
-        return result;
+        self.contains(ControlRegister::GENERATE_NMI)
     }
 
     pub fn background_pattern_addr(&self) -> u16 {
