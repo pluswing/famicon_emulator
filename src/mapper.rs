@@ -8,7 +8,7 @@ use crate::rom::Rom;
 
 pub fn mapper_from_rom(rom: &Rom) -> Box<dyn Mapper> {
     match rom.mapper {
-        0 => Box::new(Mapper0::new()),
+        0 => Box::new(Mapper0::new(rom.prg_rom.len())),
         1 => Box::new(Mapper1::new(rom.prg_rom.len())),
         _ => panic!("mapper = {} is not support.", rom.mapper),
     }
@@ -20,20 +20,22 @@ pub trait Mapper {
     fn mirror_chr_rom_addr(&self, addr: usize) -> usize;
 }
 
-pub struct Mapper0 {}
+pub struct Mapper0 {
+    prg_rom_size: usize,
+}
 
 impl Mapper0 {
-    pub fn new() -> Self {
-        Mapper0 {}
+    pub fn new(prg_rom_size: usize) -> Self {
+        Mapper0 {
+            prg_rom_size: prg_rom_size,
+        }
     }
 }
 
 impl Mapper for Mapper0 {
     fn write(&mut self, addr: u16, data: u8) {}
     fn mirror_prg_rom_addr(&self, addr: usize) -> usize {
-        if
-        /* self.prg_rom.len() == 0x4000 && */
-        addr >= 0xC000 {
+        if self.prg_rom_size == 0x4000 && addr >= 0xC000 {
             // mirror if needed
             addr - 0x4000
         } else {
@@ -173,7 +175,7 @@ impl Mapper for Mapper1 {
         let last_bank = self.prg_rom_size / bank_len - 1;
 
         match self.prg_rom_bank_mode {
-            PrgRomBankMode::IgnoreLowerBit => addr + ((num & 0x01) * bank_len),
+            PrgRomBankMode::IgnoreLowerBit => addr + ((num & 0xFE) * bank_len),
             PrgRomBankMode::FirstBankIs8 => match addr {
                 0x8000..=0xBFFF => {
                     return addr;
