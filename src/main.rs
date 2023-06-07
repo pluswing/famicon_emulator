@@ -61,6 +61,7 @@ fn main() {
 
     let rom = load_rom("rom/BombSweeper.nes");
     let rom = alter_ego_rom();
+    // let rom = mario_rom();
 
     let mut frame = Frame::new();
     let apu = NesAPU::new(&sdl_context);
