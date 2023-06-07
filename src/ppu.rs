@@ -432,9 +432,7 @@ impl ControlRegister {
     }
 
     pub fn generate_vblank_nmi(&mut self) -> bool {
-        let result = self.contains(ControlRegister::GENERATE_NMI);
-        self.set(ControlRegister::GENERATE_NMI, true);
-        return result;
+        self.contains(ControlRegister::GENERATE_NMI)
     }
 
     pub fn background_pattern_addr(&self) -> u16 {
@@ -487,7 +485,7 @@ bitflags! {
 
 impl StatusRegister {
     pub fn new() -> Self {
-        StatusRegister::from_bits_truncate(0b0000_0000)
+        StatusRegister::from_bits_truncate(0b0001_0000)
     }
 
     pub fn is_in_vblank(&mut self) -> bool {
