@@ -1,9 +1,13 @@
 pub struct NesAPU {
     ch1_register: Ch1Register,
+    ch2_register: Ch2Register,
     ch4_register: Ch4Register,
 
     ch1_device: AudioDevice<SquareWave>,
     ch1_sender: Sender<SquareNote>,
+
+    ch2_device: AudioDevice<SquareWave>,
+    ch2_sender: Sender<SquareNote>,
 
     ch4_device: AudioDevice<NoiseWave>,
     ch4_sender: Sender<NoiseNote>,
@@ -14,14 +18,19 @@ const NES_CPU_CLOCK: f32 = 1_789_772.5; // 1.78MHz
 impl NesAPU {
     pub fn new(sdl_context: &sdl2::Sdl) -> Self {
         let (ch1_device, ch1_sender) = init_square(&sdl_context);
+        let (ch2_device, ch2_sender) = init_square(&sdl_context);
         let (ch4_device, ch4_sender) = init_noise(&sdl_context);
 
         NesAPU {
             ch1_register: Ch1Register::new(),
+            ch2_register: Ch2Register::new(),
             ch4_register: Ch4Register::new(),
 
             ch1_device: ch1_device,
             ch1_sender: ch1_sender,
+
+            ch2_device: ch2_device,
+            ch2_sender: ch2_sender,
 
             ch4_device: ch4_device,
             ch4_sender: ch4_sender,
@@ -48,6 +57,30 @@ impl NesAPU {
         let hz = NES_CPU_CLOCK / (16.0 * (self.ch1_register.hz() as f32 + 1.0));
 
         self.ch1_sender
+            .send(SquareNote {
+                hz: hz,
+                volume: volume,
+                duty: duty,
+            })
+            .unwrap();
+    }
+
+    pub fn write2ch(&mut self, addr: u16, value: u8) {
+        self.ch2_register.write(addr, value);
+
+        let duty = match self.ch2_register.duty {
+            0x00 => 0.125,
+            0x01 => 0.25,
+            0x02 => 0.50,
+            0x03 => 0.75,
+            _ => panic!("can't be",),
+        };
+
+        let volume = (self.ch2_register.volume as f32) / 15.0;
+
+        let hz = NES_CPU_CLOCK / (16.0 * (self.ch2_register.frequency as f32 + 1.0));
+
+        self.ch2_sender
             .send(SquareNote {
                 hz: hz,
                 volume: volume,
@@ -120,6 +153,67 @@ impl Ch1Register {
             }
             0x4003 => {
                 self.hz_high_key_on = value;
+            }
+            _ => panic!("can't be"),
+        }
+    }
+}
+
+struct Ch2Register {
+    volume: u8,
+    envelope_flag: bool,
+    key_off_counter_flag: bool,
+    duty: u8,
+
+    sweep_change_amount: u8,
+    sweep_direction: u8,
+    sweep_timer_count: u8,
+    sweep_enabled: u8,
+
+    frequency: u16,
+
+    key_off_count: u8,
+}
+
+impl Ch2Register {
+    pub fn new() -> Self {
+        Ch2Register {
+            volume: 0,
+            envelope_flag: false,
+            key_off_counter_flag: false,
+            duty: 0,
+
+            sweep_change_amount: 0,
+            sweep_direction: 0,
+            sweep_timer_count: 0,
+            sweep_enabled: 0,
+
+            frequency: 0,
+
+            key_off_count: 0,
+        }
+    }
+
+    pub fn write(&mut self, addr: u16, value: u8) {
+        match addr {
+            0x4004 => {
+                self.volume = value & 0x0F;
+                self.envelope_flag = (value & 0x10) == 0;
+                self.key_off_counter_flag = (value & 0x20) == 0;
+                self.duty = (value & 0xC0) >> 6;
+            }
+            0x4005 => {
+                self.sweep_change_amount = value & 0x07;
+                self.sweep_direction = (value & 0x08) >> 3;
+                self.sweep_timer_count = (value & 0x70) >> 4;
+                self.sweep_enabled = (value & 0x80) >> 7;
+            }
+            0x4006 => {
+                self.frequency = (self.frequency & 0x0700) | value as u16;
+            }
+            0x4007 => {
+                self.frequency = (self.frequency & 0x00FF) | (value as u16 & 0x07) << 8;
+                self.key_off_count = (value & 0xF8) >> 3;
             }
             _ => panic!("can't be"),
         }

@@ -136,9 +136,7 @@ impl Mem for Bus<'_> {
                 self.mem_write(mirror_down_addr, data);
             }
             0x4000..=0x4003 => self.apu.write1ch(addr, data),
-            0x4004..=0x4007 => {
-                // TODO APU 2ch
-            }
+            0x4004..=0x4007 => self.apu.write2ch(addr, data),
             0x4008 | 0x400A | 0x400B => {
                 // TODO APU 3ch
             }
