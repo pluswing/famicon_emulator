@@ -296,7 +296,8 @@ impl<'a> CPU<'a> {
 
     fn interrupt_nmi(&mut self) {
         debug!("** INTERRUPT_NMI **");
-        self._push_u16(self.program_counter);
+
+        self._push_u16(self.program_counter + 1);
         let mut status = self.status;
         status = status & !FLAG_BREAK;
         status = status | FLAG_BREAK2;
@@ -496,7 +497,7 @@ impl<'a> CPU<'a> {
     pub fn rti(&mut self, mode: &AddressingMode) {
         // スタックからプロセッサ フラグをプルし、続いてプログラム カウンタをプルします。
         self.status = self._pop() & !FLAG_BREAK | FLAG_BREAK2;
-        self.program_counter = self._pop_u16();
+        self.program_counter = self._pop_u16() - 1;
     }
 
     pub fn plp(&mut self, mode: &AddressingMode) {
@@ -716,7 +717,7 @@ impl<'a> CPU<'a> {
         }
 
         // プログラム カウンターとプロセッサ ステータスがスタックにプッシュされ、
-        self._push_u16(self.program_counter);
+        self._push_u16(self.program_counter + 1);
         self._push(self.status);
 
         // $FFFE/F の IRQ 割り込みベクトルが PC にロードされ、ステータスのブレーク フラグが 1 に設定されます。
