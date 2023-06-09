@@ -1,13 +1,11 @@
 use bitflags::bitflags;
-use log::{debug, info, trace};
+use log::{debug, trace};
 
 use crate::mapper::Mapper;
-use crate::{cpu::IN_TRACE, rom::Mirroring, MAPPER};
+use crate::{cpu::IN_TRACE, rom::Mirroring};
 
 pub struct NesPPU {
-    pub chr_rom: Vec<u8>,
-    pub mirroring: Mirroring,
-    pub is_chr_ram: bool,
+    pub mapper: Box<dyn Mapper>,
 
     pub palette_table: [u8; 32],
     pub vram: [u8; 2048],
@@ -41,11 +39,9 @@ pub struct NesPPU {
 }
 
 impl NesPPU {
-    pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring, is_chr_ram: bool) -> Self {
+    pub fn new(mapper: Box<dyn Mapper>) -> Self {
         NesPPU {
-            chr_rom: chr_rom,
-            mirroring: mirroring,
-            is_chr_ram: is_chr_ram,
+            mapper: mapper,
             vram: [0; 2048],
             oam_data: [0; 64 * 4],
             oam_addr: 0,
@@ -80,8 +76,9 @@ impl NesPPU {
             0..=0x1FFF => {
                 // FIXME
                 debug!("write CHR_ROM {:04X} => {:02X}", addr, value);
-                if self.is_chr_ram {
-                    self.chr_rom[addr as usize] = value;
+                if self.mapper.is_chr_ram() {
+                    // TODO
+                    // self.mapper.chr[addr as usize] = value;
                 }
             }
             0x2000..=0x2FFF => {
@@ -200,6 +197,7 @@ impl NesPPU {
             self.status.bits()
         } else {
             self.scroll.reset();
+            self.addr.reset_latch();
             let bits = self.status.bits();
             self.status.reset_vblank_status();
             self.clear_nmi_interrupt = true;
@@ -257,8 +255,7 @@ impl NesPPU {
                     self.internal_data_buf
                 } else {
                     let result = self.internal_data_buf;
-                    let mapped_addr = MAPPER.lock().unwrap().mirror_chr_rom_addr(addr as usize);
-                    self.internal_data_buf = self.chr_rom[mapped_addr];
+                    self.internal_data_buf = self.mapper.chr_rom(addr as usize);
                     result
                 }
             }
@@ -297,7 +294,7 @@ impl NesPPU {
         let mirrored_vram = addr & 0b10_1111_1111_1111;
         let vram_index = mirrored_vram - 0x2000;
         let name_table = vram_index / 0x400;
-        match (&self.mirroring, name_table) {
+        match (&self.mapper.mirroring(), name_table) {
             (Mirroring::VERTICAL, 2) => vram_index - 0x800,
             (Mirroring::VERTICAL, 3) => vram_index - 0x800,
             (Mirroring::HORIZONTAL, 2) => vram_index - 0x400,
@@ -443,9 +440,9 @@ impl ControlRegister {
         }
     }
 
-    pub fn is_sprite_8x16_mode(&self) -> bool {
-        self.contains(ControlRegister::SPRITE_SIZE)
-    }
+    // pub fn is_sprite_8x16_mode(&self) -> bool {
+    //     self.contains(ControlRegister::SPRITE_SIZE)
+    // }
 
     pub fn sprite_pattern_addr(&self) -> u16 {
         // ignored in 8x16 mode

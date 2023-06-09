@@ -11,6 +11,7 @@ pub fn load_rom(path: &str) -> Rom {
     rom
 }
 
+#[allow(dead_code)]
 pub mod test {
     use super::*;
 
@@ -32,5 +33,17 @@ pub mod test {
 
     pub fn dq3_rom() -> Rom {
         load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes")
+    }
+
+    pub fn dq2_rom() -> Rom {
+        load_rom("rom/Dragon Quest II - Akuryou no Kamigami (Japan).nes")
+    }
+
+    pub fn ff3_rom() -> Rom {
+        load_rom("rom/Final Fantasy III (Japan).nes")
+    }
+
+    pub fn mario3_rom() -> Rom {
+        load_rom("rom/Super Mario Bros. 3 (Japan) (Rev 1).nes")
     }
 }

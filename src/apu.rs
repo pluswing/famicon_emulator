@@ -1,6 +1,7 @@
 pub struct NesAPU {
     ch1_register: Ch1Register,
 
+    #[allow(dead_code)]
     ch1_device: AudioDevice<SquareWave>,
     ch1_sender: Sender<SquareNote>,
 }

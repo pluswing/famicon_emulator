@@ -1,61 +1,54 @@
-// mapper1 = DQ3, DQ4
-// mapper2 = DQ2
-// mapper3 = bad apple
+use log::{info, warn};
 
-use log::{info, trace, warn};
+use crate::rom::{Mirroring, Rom};
 
-use crate::rom::Rom;
-
-pub fn mapper_from_rom(rom: &Rom) -> Box<dyn Mapper> {
+pub fn mapper_from_rom(rom: Rom) -> Box<dyn Mapper> {
     match rom.mapper {
-        0 => Box::new(Mapper0::new(rom.prg_rom.len())), // SMB ...
-        1 => Box::new(Mapper1::new(rom.prg_rom.len())), // DQ3 (1B), DQ4 (1B)
-        2 => Box::new(Mapper2::new(rom.prg_rom.len())), // DQ2 (2H)
-        4 => Box::new(Mapper4::new(rom.prg_rom.len())), // FF3 (4BH)
+        0 => Box::new(Mapper0::new(rom)), // SMB ...
+        1 => Box::new(Mapper1::new(rom)), // DQ3 (1B), DQ4 (1B)
+        2 => Box::new(Mapper2::new(rom)), // DQ2 (2H)
+        4 => Box::new(Mapper4::new(rom)), // FF3 (4BH)
         _ => panic!("mapper = {} is not support.", rom.mapper),
     }
 }
 
 pub trait Mapper {
     fn write(&mut self, addr: u16, data: u8);
-    fn mirror_prg_rom_addr(&self, addr: usize) -> usize;
-    fn mirror_chr_rom_addr(&mut self, addr: usize) -> usize;
+    fn prg_rom(&self, addr: usize) -> u8;
+    fn chr_rom(&mut self, addr: usize) -> u8;
+    fn mirroring(&self) -> Mirroring;
+    fn is_chr_ram(&self) -> bool;
 }
 
 pub struct Mapper0 {
-    prg_rom_size: usize,
+    rom: Rom,
 }
 
 impl Mapper0 {
-    pub fn new(prg_rom_size: usize) -> Self {
-        Mapper0 {
-            prg_rom_size: prg_rom_size,
-        }
+    pub fn new(rom: Rom) -> Self {
+        Mapper0 { rom }
     }
 }
 
 impl Mapper for Mapper0 {
-    fn write(&mut self, addr: u16, data: u8) {}
-    fn mirror_prg_rom_addr(&self, addr: usize) -> usize {
-        if self.prg_rom_size == 0x4000 && addr >= 0xC000 {
+    fn write(&mut self, _addr: u16, _data: u8) {}
+    fn prg_rom(&self, addr: usize) -> u8 {
+        if self.rom.prg_rom.len() == 0x4000 && addr >= 0xC000 {
             // mirror if needed
-            addr - 0x4000
+            self.rom.prg_rom[addr - 0x4000]
         } else {
-            addr
+            self.rom.prg_rom[addr]
         }
     }
-    fn mirror_chr_rom_addr(&mut self, addr: usize) -> usize {
-        addr
+    fn chr_rom(&mut self, addr: usize) -> u8 {
+        self.rom.chr_rom[addr]
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-#[allow(non_camel_case_types)]
-enum Mirroring {
-    Lower,      // 0: 1 画面、下位バンク
-    Upper,      // 1: 1 画面、上位バンク
-    Vertical,   // 2: 垂直
-    Horizontal, // 3: 水平
+    fn mirroring(&self) -> Mirroring {
+        self.rom.screen_mirroring
+    }
+    fn is_chr_ram(&self) -> bool {
+        self.rom.is_chr_ram
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -74,7 +67,7 @@ enum ChrRomBankMode {
 }
 
 pub struct Mapper1 {
-    prg_rom_size: usize,
+    rom: Rom,
 
     shift_register: u8,
     write_count: u8,
@@ -94,12 +87,12 @@ pub struct Mapper1 {
 }
 
 impl Mapper1 {
-    pub fn new(prg_rom_size: usize) -> Self {
+    pub fn new(rom: Rom) -> Self {
         Mapper1 {
-            prg_rom_size: prg_rom_size,
+            rom: rom,
             shift_register: 0,
             write_count: 0,
-            mirroring: Mirroring::Lower,
+            mirroring: Mirroring::LOWER,
             prg_rom_bank_mode: PrgRomBankMode::LastBankIsC,
             chr_rom_bank_mode: ChrRomBankMode::Switch8Kb,
             chr_bank0: 0,
@@ -141,10 +134,10 @@ impl Mapper for Mapper1 {
                         _ => panic!("can't be"),
                     };
                     self.mirroring = match v & 0x03 {
-                        0 => Mirroring::Lower,
-                        1 => Mirroring::Upper,
-                        2 => Mirroring::Vertical,
-                        3 => Mirroring::Horizontal,
+                        0 => Mirroring::LOWER,
+                        1 => Mirroring::UPPER,
+                        2 => Mirroring::VERTICAL,
+                        3 => Mirroring::HORIZONTAL,
                         _ => panic!("can't be"),
                     };
                     info!("MAPPER1: control: mirroring={:?}, prg_rom_bank_mode={:?}, chr_rom_bank_mode={:?}", self.mirroring, self.prg_rom_bank_mode, self.chr_rom_bank_mode);
@@ -167,16 +160,16 @@ impl Mapper for Mapper1 {
         }
     }
 
-    fn mirror_prg_rom_addr(&self, addr: usize) -> usize {
+    fn prg_rom(&self, addr: usize) -> u8 {
         let num = self.prg_bank as usize & 0x0F;
 
         let bank_len = 16 * 1024;
-        let last_bank = self.prg_rom_size / bank_len - 1;
+        let last_bank = self.rom.prg_rom.len() / bank_len - 1;
 
-        match self.prg_rom_bank_mode {
+        let mirrored_addr = match self.prg_rom_bank_mode {
             PrgRomBankMode::IgnoreLowerBit => (num & 0x0E) * bank_len,
             PrgRomBankMode::FirstBankIs8 => match addr {
-                0x8000..=0xBFFF => 0,
+                0x8000..=0xBFFF => addr,
                 0xC000..=0xFFFF => num * bank_len,
                 _ => panic!("can't be"),
             },
@@ -185,13 +178,14 @@ impl Mapper for Mapper1 {
                 0xC000..=0xFFFF => addr - bank_len + last_bank * bank_len,
                 _ => panic!("can't be"),
             },
-        }
+        };
+        self.rom.prg_rom[mirrored_addr - 0x8000]
     }
 
-    fn mirror_chr_rom_addr(&mut self, addr: usize) -> usize {
+    fn chr_rom(&mut self, addr: usize) -> u8 {
         let bank_len = 4 * 1024;
 
-        match self.chr_rom_bank_mode {
+        let mirrored_addr = match self.chr_rom_bank_mode {
             ChrRomBankMode::Switch8Kb => {
                 // chr_bank0をみて、chr_bank1は無視。
                 let num = self.chr_bank0 as usize & 0x1E;
@@ -208,12 +202,19 @@ impl Mapper for Mapper1 {
                 }
                 _ => panic!("can't be"),
             },
-        }
+        };
+        self.rom.chr_rom[mirrored_addr]
+    }
+    fn mirroring(&self) -> Mirroring {
+        self.rom.screen_mirroring
+    }
+    fn is_chr_ram(&self) -> bool {
+        self.rom.is_chr_ram
     }
 }
 
 pub struct Mapper2 {
-    prg_rom_size: usize,
+    rom: Rom,
 
     prg_bank: u8,
     chr_bank0: u8,
@@ -226,9 +227,9 @@ pub struct Mapper2 {
 }
 
 impl Mapper2 {
-    pub fn new(prg_rom_size: usize) -> Self {
+    pub fn new(rom: Rom) -> Self {
         Mapper2 {
-            prg_rom_size: prg_rom_size,
+            rom: rom,
             prg_bank: 0,
             chr_bank0: 0,
             chr_bank1: 0,
@@ -271,22 +272,23 @@ impl Mapper for Mapper2 {
         }
     }
 
-    fn mirror_prg_rom_addr(&self, addr: usize) -> usize {
+    fn prg_rom(&self, addr: usize) -> u8 {
         let bank_len: usize = 8 * 1024;
         let num = self.prg_bank as usize & 0x0F;
-        let last_bank = self.prg_rom_size / bank_len - 1;
-        match addr {
+        let last_bank = self.rom.prg_rom.len() / bank_len - 1;
+        let mirrored_addr = match addr {
             0x8000..=0x9FFF => addr + bank_len * num,
             0xA000..=0xBFFF => (addr - bank_len * 1) + bank_len * (last_bank - 2),
             0xC000..=0xDFFF => (addr - bank_len * 2) + bank_len * (last_bank - 1),
             0xE000..=0xFFFF => (addr - bank_len * 3) + bank_len * (last_bank - 0),
             _ => panic!("can't be"),
-        }
+        };
+        self.rom.prg_rom[mirrored_addr - 0x8000]
     }
 
-    fn mirror_chr_rom_addr(&mut self, addr: usize) -> usize {
+    fn chr_rom(&mut self, addr: usize) -> u8 {
         let bank_len: usize = 4 * 1024;
-        let ret = match addr {
+        let mirrored_addr = match addr {
             0x0000..=0x0FFF => match self.latch0 {
                 0xFD => addr + bank_len * (self.chr_bank0 & 0x1F) as usize,
                 0xFE => addr + bank_len * (self.chr_bank1 & 0x1F) as usize,
@@ -306,14 +308,20 @@ impl Mapper for Mapper2 {
             0x1FD8 => self.latch1 = 0xFD,
             0x1FE8 => self.latch1 = 0xFE,
             _ => {}
-        }
+        };
 
-        ret
+        self.rom.chr_rom[mirrored_addr]
+    }
+    fn mirroring(&self) -> Mirroring {
+        self.rom.screen_mirroring
+    }
+    fn is_chr_ram(&self) -> bool {
+        self.rom.is_chr_ram
     }
 }
 
 pub struct Mapper4 {
-    prg_rom_size: usize,
+    rom: Rom,
 
     prg_bank: u8,
     chr_bank0: u8,
@@ -326,9 +334,9 @@ pub struct Mapper4 {
 }
 
 impl Mapper4 {
-    pub fn new(prg_rom_size: usize) -> Self {
+    pub fn new(rom: Rom) -> Self {
         Mapper4 {
-            prg_rom_size: prg_rom_size,
+            rom: rom,
             prg_bank: 0,
             chr_bank0: 0,
             chr_bank1: 0,
@@ -373,20 +381,21 @@ impl Mapper for Mapper4 {
         }
     }
 
-    fn mirror_prg_rom_addr(&self, addr: usize) -> usize {
+    fn prg_rom(&self, addr: usize) -> u8 {
         let bank_len: usize = 16 * 1024;
         let num = self.prg_bank as usize & 0x0F;
-        let last_bank = self.prg_rom_size / bank_len - 1;
-        match addr {
+        let last_bank = self.rom.prg_rom.len() / bank_len - 1;
+        let mirrored_addr = match addr {
             0x8000..=0xBFFF => addr + bank_len * num,
             0xC000..=0xFFFF => addr - bank_len + bank_len * last_bank,
             _ => panic!("can't be"),
-        }
+        };
+        self.rom.prg_rom[mirrored_addr - 0x8000]
     }
 
-    fn mirror_chr_rom_addr(&mut self, addr: usize) -> usize {
+    fn chr_rom(&mut self, addr: usize) -> u8 {
         let bank_len: usize = 4 * 1024;
-        let ret = match addr {
+        let mirrored_addr = match addr {
             0x0000..=0x0FFF => match self.latch0 {
                 0xFD => addr + bank_len * (self.chr_bank0 & 0x1F) as usize,
                 0xFE => addr + bank_len * (self.chr_bank1 & 0x1F) as usize,
@@ -406,8 +415,14 @@ impl Mapper for Mapper4 {
             0x1FD8 => self.latch1 = 0xFD,
             0x1FE8 => self.latch1 = 0xFE,
             _ => {}
-        }
+        };
 
-        ret
+        self.rom.chr_rom[mirrored_addr]
+    }
+    fn mirroring(&self) -> Mirroring {
+        self.rom.screen_mirroring
+    }
+    fn is_chr_ram(&self) -> bool {
+        self.rom.is_chr_ram
     }
 }

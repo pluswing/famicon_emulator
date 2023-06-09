@@ -175,7 +175,13 @@ ${opsNames.map((name) => `
   }
 }`
 
-  fs.writeFileSync(path.join(__dirname, "..", "src", "opscodes.rs"), `${header}\n${code}\n${callCode}`)
+  const nesCpuOps = `
+pub trait NesCpuOps {
+${opsNames.map((name) => `  fn ${name.toLowerCase()}(&mut self, mode: &AddressingMode);`).join("\n")}
+}
+`
+
+  fs.writeFileSync(path.join(__dirname, "..", "src", "opscodes.rs"), `${header}\n${code}\n${callCode}\n${nesCpuOps}`)
   console.log("done.")
 }
 

@@ -1,5 +1,3 @@
-use log::{debug, info};
-
 use crate::frame::Frame;
 use crate::palette;
 use crate::ppu::NesPPU;
@@ -23,28 +21,29 @@ impl Rect {
     }
 }
 
-pub fn render(ppu: &NesPPU, frame: &mut Frame) {
+pub fn render(ppu: &mut NesPPU, frame: &mut Frame) {
     // draw background
     let scroll_x = (ppu.scroll.scroll_x) as usize;
     let scroll_y = (ppu.scroll.scroll_y) as usize;
 
-    let (main_name_table, second_name_table) = match (&ppu.mirroring, ppu.ctrl.nametable_addr()) {
-        (Mirroring::VERTICAL, 0x2000) | (Mirroring::VERTICAL, 0x2800) => {
-            (&ppu.vram[0x000..0x400], &ppu.vram[0x400..0x800])
-        }
-        (Mirroring::VERTICAL, 0x2400) | (Mirroring::VERTICAL, 0x2C00) => {
-            (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
-        }
-        (Mirroring::HORIZONTAL, 0x2000) | (Mirroring::HORIZONTAL, 0x2400) => {
-            (&ppu.vram[0x000..0x400], &ppu.vram[0x400..0x800])
-        }
-        (Mirroring::HORIZONTAL, 0x2800) | (Mirroring::HORIZONTAL, 0x2C00) => {
-            (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
-        }
-        (_, _) => {
-            panic!("Not supported mirroring type {:?}", ppu.mirroring);
-        }
-    };
+    let (main_name_table, second_name_table) =
+        match (ppu.mapper.mirroring(), ppu.ctrl.nametable_addr()) {
+            (Mirroring::VERTICAL, 0x2000) | (Mirroring::VERTICAL, 0x2800) => {
+                (&ppu.vram[0x000..0x400], &ppu.vram[0x400..0x800])
+            }
+            (Mirroring::VERTICAL, 0x2400) | (Mirroring::VERTICAL, 0x2C00) => {
+                (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
+            }
+            (Mirroring::HORIZONTAL, 0x2000) | (Mirroring::HORIZONTAL, 0x2400) => {
+                (&ppu.vram[0x000..0x400], &ppu.vram[0x400..0x800])
+            }
+            (Mirroring::HORIZONTAL, 0x2800) | (Mirroring::HORIZONTAL, 0x2C00) => {
+                (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
+            }
+            (_, _) => {
+                panic!("Not supported mirroring type {:?}", ppu.mapper.mirroring());
+            }
+        };
 
     let screen_w = 256;
     let screen_h = 240;
@@ -104,8 +103,12 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
 
         let bank: u16 = ppu.ctrl.sprite_pattern_addr();
 
-        let tile =
-            &ppu.chr_rom[(bank + tile_idx * 16) as usize..=(bank + tile_idx * 16 + 15) as usize];
+        let mut tile: [u8; 15] = [0; 15];
+        let mut i = 0;
+        for addr in (bank + tile_idx * 16) as usize..=(bank + tile_idx * 16 + 15) as usize {
+            tile[i] = ppu.mapper.chr_rom(addr);
+            i += 1
+        }
 
         for y in 0..=7 {
             let mut upper = tile[y];
@@ -134,7 +137,7 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
 }
 
 fn bg_pallette(
-    ppu: &NesPPU,
+    ppu: &mut NesPPU,
     attribute_table: &[u8],
     tile_column: usize,
     tile_row: usize,
@@ -160,14 +163,14 @@ fn bg_pallette(
     ]
 }
 
-fn sprite_palette(ppu: &NesPPU, tile_y: usize, palette_idx: u8) -> [u8; 4] {
+fn sprite_palette(ppu: &mut NesPPU, tile_y: usize, palette_idx: u8) -> [u8; 4] {
     let start = 0x11 + (palette_idx * 4) as usize;
     let p = ppu.read_palette_table(tile_y);
     [0, p[start], p[start + 1], p[start + 2]]
 }
 
 fn render_name_table(
-    ppu: &NesPPU,
+    ppu: &mut NesPPU,
     frame: &mut Frame,
     name_table: &[u8],
     view_port: Rect,
@@ -181,8 +184,13 @@ fn render_name_table(
         let tile_column = i % 32;
         let tile_row = i / 32;
         let tile_idx = name_table[i] as u16;
-        let tile =
-            &ppu.chr_rom[(bank + tile_idx * 16) as usize..=(bank + tile_idx * 16 + 15) as usize];
+        let mut tile: [u8; 15] = [0; 15];
+        let mut i = 0;
+        for addr in (bank + tile_idx * 16) as usize..=(bank + tile_idx * 16 + 15) as usize {
+            tile[i] = ppu.mapper.chr_rom(addr);
+            i += 1
+        }
+
         let palette = bg_pallette(ppu, attribute_table, tile_column, tile_row);
 
         for y in 0..=7 {

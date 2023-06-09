@@ -14,34 +14,28 @@ mod ppu;
 mod render;
 mod rom;
 
-use crate::cartridge::test::dq3_rom;
+use crate::cartridge::test::{dq2_rom, dq3_rom, ff3_rom, mario3_rom};
 use crate::cpu::{trace, IN_TRACE};
-use crate::mapper::{mapper_from_rom, Mapper0, Mapper1};
+use crate::mapper::mapper_from_rom;
 
-use self::bus::{Bus, Mem};
+use self::bus::Bus;
 use self::cpu::CPU;
 
 use apu::NesAPU;
 use cartridge::load_rom;
-use cartridge::test::{alter_ego_rom, mario_rom, test_rom};
-use frame::{show_tile, Frame};
+use cartridge::test::mario_rom;
+use frame::Frame;
 use joypad::Joypad;
-use log::{debug, info, log_enabled, trace, Level};
-use mapper::Mapper;
+use log::{info, log_enabled, Level};
 use ppu::NesPPU;
-use rand::Rng;
+
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::pixels::Color;
+
 use sdl2::pixels::PixelFormatEnum;
-use sdl2::EventPump;
+
 use std::collections::HashMap;
 use std::io::Write;
-use std::sync::Mutex;
-
-lazy_static! {
-    pub static ref MAPPER: Mutex::<Box<Mapper1>> = Mutex::new(Box::new(Mapper1::new(256 * 1024)));
-}
 
 fn main() {
     env_logger::builder()
@@ -86,11 +80,15 @@ fn main() {
     // let rom = load_rom("rom/ppu/MapWalker.nes");
     // let rom = alter_ego_rom();
     // let rom = load_rom("rom/ppu/vbl_nmi_timing/3.even_odd_frames.nes");
-    let rom = load_rom("rom/nes-test-roms/cpu_exec_space/test_cpu_exec_space_ppuio.nes");
-    let rom = mario_rom();
-    let rom = load_rom("rom/nes-test-roms/blargg_litewall/blargg_litewall-10c.nes");
-    let rom = load_rom("rom/Championship Lode Runner (Japan).nes");
-    let rom = dq3_rom();
+    let _rom = load_rom("rom/nes-test-roms/cpu_exec_space/test_cpu_exec_space_ppuio.nes");
+    let _rom = load_rom("rom/nes-test-roms/blargg_litewall/blargg_litewall-10c.nes");
+    let _rom = load_rom("rom/nes-test-roms/MMC1_A12/mmc1_a12.nes");
+    let _rom = load_rom("rom/Championship Lode Runner (Japan).nes");
+    let _rom = mario_rom();
+    let _rom = dq3_rom();
+    let _rom = dq2_rom();
+    let _rom = ff3_rom();
+    let rom = mario3_rom();
 
     info!(
         "ROM: mapper={}, mirroring={:?} chr_ram={} PRG={}KB, CHR={}KB",
@@ -101,36 +99,42 @@ fn main() {
         rom.chr_rom.len() / 1024
     );
 
+    let mapper = mapper_from_rom(rom);
+
     let mut frame = Frame::new();
     let apu = NesAPU::new(&sdl_context);
-    let bus = Bus::new(rom, apu, move |ppu: &NesPPU, joypad1: &mut Joypad| {
-        render::render(ppu, &mut frame);
-        texture.update(None, &frame.data, 256 * 3).unwrap();
+    let bus = Bus::new(
+        mapper,
+        apu,
+        move |ppu: &mut NesPPU, joypad1: &mut Joypad| {
+            render::render(ppu, &mut frame);
+            texture.update(None, &frame.data, 256 * 3).unwrap();
 
-        canvas.copy(&texture, None, None).unwrap();
+            canvas.copy(&texture, None, None).unwrap();
 
-        canvas.present();
-        for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit { .. }
-                | Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => std::process::exit(0),
-                Event::KeyDown { keycode, .. } => {
-                    if let Some(key) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
-                        joypad1.set_button_pressed_status(*key, true);
+            canvas.present();
+            for event in event_pump.poll_iter() {
+                match event {
+                    Event::Quit { .. }
+                    | Event::KeyDown {
+                        keycode: Some(Keycode::Escape),
+                        ..
+                    } => std::process::exit(0),
+                    Event::KeyDown { keycode, .. } => {
+                        if let Some(key) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
+                            joypad1.set_button_pressed_status(*key, true);
+                        }
                     }
-                }
-                Event::KeyUp { keycode, .. } => {
-                    if let Some(key) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
-                        joypad1.set_button_pressed_status(*key, false);
+                    Event::KeyUp { keycode, .. } => {
+                        if let Some(key) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
+                            joypad1.set_button_pressed_status(*key, false);
+                        }
                     }
+                    _ => { /* do nothing */ }
                 }
-                _ => { /* do nothing */ }
             }
-        }
-    });
+        },
+    );
 
     let mut cpu = CPU::new(bus);
 
@@ -169,7 +173,7 @@ fn main() {
         });
     */
 }
-
+/*
 fn handle_user_input(cpu: &mut CPU, event_pump: &mut EventPump) {
     for event in event_pump.poll_iter() {
         match event {
@@ -238,3 +242,4 @@ fn read_screen_state(cpu: &mut CPU, frame: &mut [u8; 32 * 3 * 32]) -> bool {
     }
     update
 }
+*/

@@ -1,6 +1,8 @@
 #[derive(Debug, PartialEq)]
 #[allow(non_camel_case_types)]
 pub enum Mirroring {
+    LOWER, // 0: 1 画面、下位バンク
+    UPPER, // 1: 1 画面、上位バンク
     VERTICAL,
     HORIZONTAL,
     FOUR_SCREEN,
@@ -63,14 +65,15 @@ impl Rom {
             is_chr_ram: chr_rom_size == 0,
         })
     }
-
-    pub fn empty() -> Self {
-        return Rom {
-            prg_rom: vec![],
-            chr_rom: vec![],
-            mapper: 0,
-            screen_mirroring: Mirroring::VERTICAL,
-            is_chr_ram: false,
-        };
-    }
+    /*
+        pub fn empty() -> Self {
+            return Rom {
+                prg_rom: vec![],
+                chr_rom: vec![],
+                mapper: 0,
+                screen_mirroring: Mirroring::VERTICAL,
+                is_chr_ram: false,
+            };
+        }
+    */
 }
