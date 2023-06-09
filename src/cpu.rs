@@ -968,19 +968,32 @@ pub fn trace(cpu: &mut CPU) -> String {
     let memacc = memory_access(cpu, &ops, &args);
     let status = cpu2str(cpu);
 
-    let log = format!(
-        "{:<6}{:<9}{:<33}{}",
-        pc,
-        bin,
-        vec![asm, memacc].join(" "),
-        status
-    );
+    // let log = format!(
+    //     "{:<6}{:<9}{:<33}{}",
+    //     pc,
+    //     bin,
+    //     vec![asm, memacc].join(" "),
+    //     status
+    // );
 
-    trace!("{}", log);
+    // trace!("{}", log);
 
     unsafe { IN_TRACE = false };
-
-    log
+    // A:00 X:00 Y:00 S:FD   $8000: 78       SEI
+    let mut offset_space = String::from("");
+    for _ in 0..(0xFF - cpu.stack_pointer) {
+        offset_space = offset_space + " ";
+    }
+    println!(
+        "{:<20}{}${:}: {:<8} {}",
+        status,
+        offset_space,
+        pc,
+        bin,
+        vec![asm, memacc].join(" ").trim().to_string()
+    );
+    // log
+    format!("")
 }
 
 fn binary(op: u8, args: &Vec<u8>) -> String {
@@ -1000,6 +1013,8 @@ fn disasm(program_counter: u16, ops: &OpCode, args: &Vec<u8>) -> String {
         ops.name,
         address(program_counter, &ops, args)
     )
+    .trim()
+    .to_string()
 }
 
 fn address(program_counter: u16, ops: &OpCode, args: &Vec<u8>) -> String {
@@ -1087,7 +1102,7 @@ fn memory_access(cpu: &mut CPU, ops: &OpCode, args: &Vec<u8>) -> String {
     match ops.addressing_mode {
         AddressingMode::ZeroPage => {
             let value = cpu.mem_read(args[0] as u16);
-            format!("= {:<02X}", value)
+            format!("= #${:<02X}", value)
         }
         AddressingMode::ZeroPage_X => {
             let addr = args[0].wrapping_add(cpu.register_x) as u16;
@@ -1104,7 +1119,7 @@ fn memory_access(cpu: &mut CPU, ops: &OpCode, args: &Vec<u8>) -> String {
             let lo = args[0] as u16;
             let addr = hi << 8 | lo;
             let value = cpu.mem_read(addr);
-            format!("= {:<02X}", value)
+            format!("= #${:<02X}", value)
         }
         AddressingMode::Absolute_X => {
             let hi = args[1] as u16;
@@ -1144,8 +1159,8 @@ fn memory_access(cpu: &mut CPU, ops: &OpCode, args: &Vec<u8>) -> String {
 
 fn cpu2str(cpu: &CPU) -> String {
     format!(
-        "A:{:<02X} X:{:<02X} Y:{:<02X} P:{:<02X} SP:{:<02X}",
-        cpu.register_a, cpu.register_x, cpu.register_y, cpu.status, cpu.stack_pointer,
+        "A:{:<02X} X:{:<02X} Y:{:<02X} S:{:<02X}",
+        cpu.register_a, cpu.register_x, cpu.register_y, cpu.stack_pointer,
     )
 }
 
