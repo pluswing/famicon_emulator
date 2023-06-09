@@ -137,9 +137,7 @@ impl Mem for Bus<'_> {
             }
             0x4000..=0x4003 => self.apu.write1ch(addr, data),
             0x4004..=0x4007 => self.apu.write2ch(addr, data),
-            0x4008 | 0x400A | 0x400B => {
-                // TODO APU 3ch
-            }
+            0x4008 | 0x400A | 0x400B => self.apu.write3ch(addr, data),
             0x400C | 0x400E | 0x400F => self.apu.write4ch(addr, data),
             0x4010..=0x4013 | 0x4015 => {
                 // TODO DMCch

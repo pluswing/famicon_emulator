@@ -1,6 +1,7 @@
 pub struct NesAPU {
     ch1_register: Ch1Register,
     ch2_register: Ch2Register,
+    ch3_register: Ch3Register,
     ch4_register: Ch4Register,
 
     ch1_device: AudioDevice<SquareWave>,
@@ -8,6 +9,9 @@ pub struct NesAPU {
 
     ch2_device: AudioDevice<SquareWave>,
     ch2_sender: Sender<SquareNote>,
+
+    ch3_device: AudioDevice<TriangleWave>,
+    ch3_sender: Sender<TriangleNote>,
 
     ch4_device: AudioDevice<NoiseWave>,
     ch4_sender: Sender<NoiseNote>,
@@ -19,11 +23,13 @@ impl NesAPU {
     pub fn new(sdl_context: &sdl2::Sdl) -> Self {
         let (ch1_device, ch1_sender) = init_square(&sdl_context);
         let (ch2_device, ch2_sender) = init_square(&sdl_context);
+        let (ch3_device, ch3_sender) = init_triangle(&sdl_context);
         let (ch4_device, ch4_sender) = init_noise(&sdl_context);
 
         NesAPU {
             ch1_register: Ch1Register::new(),
             ch2_register: Ch2Register::new(),
+            ch3_register: Ch3Register::new(),
             ch4_register: Ch4Register::new(),
 
             ch1_device: ch1_device,
@@ -31,6 +37,9 @@ impl NesAPU {
 
             ch2_device: ch2_device,
             ch2_sender: ch2_sender,
+
+            ch3_device: ch3_device,
+            ch3_sender: ch3_sender,
 
             ch4_device: ch4_device,
             ch4_sender: ch4_sender,
@@ -87,6 +96,14 @@ impl NesAPU {
                 duty: duty,
             })
             .unwrap();
+    }
+
+    pub fn write3ch(&mut self, addr: u16, value: u8) {
+        self.ch3_register.write(addr, value);
+
+        let hz = NES_CPU_CLOCK / (16.0 * (self.ch2_register.frequency as f32 + 1.0));
+
+        self.ch3_sender.send(TriangleNote { hz: hz }).unwrap();
     }
 
     pub fn write4ch(&mut self, addr: u16, value: u8) {
@@ -220,6 +237,45 @@ impl Ch2Register {
     }
 }
 
+struct Ch3Register {
+    // 4008
+    length: u8,
+    key_off_counter_flag: bool,
+
+    // 400A, 400B
+    frequency: u16,
+    key_off_count: u8,
+}
+
+impl Ch3Register {
+    pub fn new() -> Self {
+        Ch3Register {
+            length: 0,
+            key_off_counter_flag: false,
+            frequency: 0,
+            key_off_count: 0,
+        }
+    }
+
+    pub fn write(&mut self, addr: u16, value: u8) {
+        match addr {
+            0x4008 => {
+                self.length = value & 0x7F;
+                self.key_off_counter_flag = (value & 0x80) == 0;
+            }
+            0x4009 => {}
+            0x400A => {
+                self.frequency = (self.frequency & 0x0700) | value as u16;
+            }
+            0x400B => {
+                self.frequency = (self.frequency & 0x00FF) | (value as u16 & 0x07) << 8;
+                self.key_off_count = (value & 0xF8) >> 3;
+            }
+            _ => panic!("can't be"),
+        }
+    }
+}
+
 enum NoiseKind {
     Long,
     Short,
@@ -332,6 +388,64 @@ fn init_square(sdl_context: &sdl2::Sdl) -> (AudioDevice<SquareWave>, Sender<Squa
                 volume: 0.0,
                 duty: 0.0,
             },
+        })
+        .unwrap();
+
+    device.resume();
+
+    (device, sender)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct TriangleNote {
+    hz: f32,
+}
+
+struct TriangleWave {
+    freq: f32,
+    phase: f32,
+    receiver: Receiver<TriangleNote>,
+    note: TriangleNote,
+}
+
+impl AudioCallback for TriangleWave {
+    type Channel = f32;
+
+    fn callback(&mut self, out: &mut [f32]) {
+        for x in out.iter_mut() {
+            let res = self.receiver.recv_timeout(Duration::from_millis(0));
+            match res {
+                Ok(note) => self.note = note,
+                Err(_) => {}
+            }
+            *x = (if self.phase <= 0.5 {
+                self.phase
+            } else {
+                1.0 - self.phase
+            } - 0.25)
+                * 2.0; // volume
+            self.phase = (self.phase + self.note.hz / self.freq) % 1.0;
+        }
+    }
+}
+
+fn init_triangle(sdl_context: &sdl2::Sdl) -> (AudioDevice<TriangleWave>, Sender<TriangleNote>) {
+    let audio_subsystem = sdl_context.audio().unwrap();
+
+    let (sender, receiver) = channel::<TriangleNote>();
+
+    let desired_spec = AudioSpecDesired {
+        freq: Some(44100),
+        channels: Some(1),
+        samples: None,
+    };
+
+    let device = audio_subsystem
+        .open_playback(None, &desired_spec, |spec| TriangleWave {
+            freq: spec.freq as f32,
+            phase: 0.0,
+            receiver: receiver,
+            note: TriangleNote { hz: 0.0 },
         })
         .unwrap();
 
