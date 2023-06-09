@@ -7,6 +7,7 @@ use log::{debug, error, info, log_enabled, trace, warn, Level};
 
 pub struct Bus<'call> {
     cpu_vram: [u8; 2048],
+    save_ram: [u8; 8192], // 8KB
     prg_rom: Vec<u8>,
     ppu: NesPPU,
     joypad1: Joypad,
@@ -25,6 +26,7 @@ impl<'call> Bus<'call> {
         let ppu = NesPPU::new(rom.chr_rom, rom.screen_mirroring, rom.is_chr_ram);
         Bus {
             cpu_vram: [0; 2048],
+            save_ram: [0; 8192],
             prg_rom: rom.prg_rom,
             ppu: ppu,
             joypad1: Joypad::new(),
@@ -37,6 +39,7 @@ impl<'call> Bus<'call> {
 
     fn read_prg_rom(&self, addr: u16) -> u8 {
         let mut mirrored = MAPPER.lock().unwrap().mirror_prg_rom_addr(addr as usize);
+        info!("PRG_ROM: {:04X} => {:04X}", addr, mirrored);
         mirrored -= 0x8000;
         self.prg_rom[mirrored]
     }
@@ -115,6 +118,7 @@ impl Mem for Bus<'_> {
                 0
             }
             PRG_ROM..=PRG_ROM_END => self.read_prg_rom(addr),
+            0x6000..=0x7FFF => self.save_ram[(addr - 0x6000) as usize],
             _ => {
                 warn!("Ignoreing mem access at {:X}", addr);
                 0
@@ -208,6 +212,9 @@ impl Mem for Bus<'_> {
             PRG_ROM..=PRG_ROM_END => {
                 MAPPER.lock().unwrap().write(addr, data);
                 // warn!("Attempt to write to Cartrige ROM space")
+            }
+            0x6000..=0x7FFF => {
+                self.save_ram[(addr - 0x6000) as usize] = data;
             }
             _ => {
                 error!("Ignoreing mem write-access at {:X}", addr)
