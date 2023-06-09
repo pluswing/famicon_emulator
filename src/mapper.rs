@@ -176,7 +176,7 @@ impl Mapper for Mapper1 {
         match self.prg_rom_bank_mode {
             PrgRomBankMode::IgnoreLowerBit => (num & 0x0E) * bank_len,
             PrgRomBankMode::FirstBankIs8 => match addr {
-                0x8000..=0xBFFF => 0,
+                0x8000..=0xBFFF => addr,
                 0xC000..=0xFFFF => num * bank_len,
                 _ => panic!("can't be"),
             },
