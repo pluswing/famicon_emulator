@@ -11,7 +11,7 @@ pub fn mapper_from_rom(rom: &Rom) -> Box<dyn Mapper> {
         0 => Box::new(Mapper0::new(rom.prg_rom.len())), // SMB ...
         1 => Box::new(Mapper1::new(rom.prg_rom.len())), // DQ3 (1B), DQ4 (1B)
         2 => Box::new(Mapper2::new(rom.prg_rom.len())), // DQ2 (2H)
-        4 => Box::new(Mapper4::new(rom.prg_rom.len())), // FF3 (4BH)
+        // 4 => Box::new(Mapper4::new(rom.prg_rom.len())), // FF3 (4BH)
         _ => panic!("mapper = {} is not support.", rom.mapper),
     }
 }
