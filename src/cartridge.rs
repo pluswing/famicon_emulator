@@ -33,4 +33,8 @@ pub mod test {
     pub fn dq3_rom() -> Rom {
         load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes")
     }
+
+    pub fn dq2_rom() -> Rom {
+        load_rom("rom/Dragon Quest II - Akuryou no Kamigami (Japan).nes")
+    }
 }
