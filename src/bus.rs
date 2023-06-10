@@ -39,21 +39,24 @@ impl<'call> Bus<'call> {
 
     fn read_prg_rom(&self, addr: u16) -> u8 {
         let mut mirrored = MAPPER.lock().unwrap().mirror_prg_rom_addr(addr as usize);
-        info!("PRG_ROM: {:04X} => {:04X}", addr, mirrored);
+        // info!("PRG_ROM: {:04X} => {:04X}", addr, mirrored);
         mirrored -= 0x8000;
         self.prg_rom[mirrored]
     }
 
-    pub fn tick(&mut self, cycles: u8) {
+    pub fn tick(&mut self, cycles: u8) -> u8 {
         self.cycles += cycles as usize;
 
         let nmi_before = self.ppu.nmi_interrupt.is_some();
         self.ppu.tick(cycles * 3);
         let nmi_after = self.ppu.nmi_interrupt.is_some();
 
+        let cnt = self.apu.tick(cycles);
+
         if !nmi_before && nmi_after {
             (self.gameloop_callback)(&self.ppu, &mut self.joypad1);
         }
+        cnt
     }
 
     pub fn poll_nmi_status(&mut self) -> Option<i32> {
@@ -111,6 +114,7 @@ impl Mem for Bus<'_> {
                 debug!("READ PPU MIRROR: {:04X} => {:04X}", addr, mirror_down_addr);
                 self.mem_read(mirror_down_addr)
             }
+            0x4015 => self.apu.read_status(),
             0x4016 => self.joypad1.read(),
             0x4017 => {
                 // readはjoypad2になるらしいが、writeはAPUらしい。。
@@ -170,9 +174,10 @@ impl Mem for Bus<'_> {
             0x4004..=0x4007 => self.apu.write2ch(addr, data),
             0x4008 | 0x400A | 0x400B => self.apu.write3ch(addr, data),
             0x400C | 0x400E | 0x400F => self.apu.write4ch(addr, data),
-            0x4010..=0x4013 | 0x4015 => {
+            0x4010..=0x4013 => {
                 // TODO DMCch
             }
+            0x4015 => self.apu.write_status(data),
             0x4016 => {
                 self.joypad1.write(data);
                 // TODO 2Pの書き込みもここでやるのかな？
@@ -183,9 +188,7 @@ impl Mem for Bus<'_> {
                 // 書き込みは、joypadではなく、APUになる。
                 //   APUフレームカウンター
                 //   https://www.nesdev.org/wiki/APU_Frame_Counter
-                if (data & 0xC0) == 0 {
-                    //
-                }
+                self.apu.write_frame_counter(data);
                 info!("WRITE ACCESS 0x4017. {:02X}", data);
             }
             0x4014 => {

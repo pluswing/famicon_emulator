@@ -15,6 +15,13 @@ pub struct NesAPU {
 
     ch4_device: AudioDevice<NoiseWave>,
     ch4_sender: Sender<NoiseNote>,
+
+    // see: https://www.nesdev.org/wiki/APU_Frame_Counter
+    frame_counter: u8,
+    cycles: usize,
+
+    // see: https://www.nesdev.org/apu_ref.txt
+    status: u8,
 }
 
 const NES_CPU_CLOCK: f32 = 1_789_772.5; // 1.78MHz
@@ -43,6 +50,10 @@ impl NesAPU {
 
             ch4_device: ch4_device,
             ch4_sender: ch4_sender,
+
+            frame_counter: 0x40, // 割り込み禁止がデフォルト
+            cycles: 0,
+            status: 0,
         }
     }
 
@@ -123,6 +134,50 @@ impl NesAPU {
                 volume: volume,
             })
             .unwrap();
+    }
+
+    pub fn write_status(&mut self, value: u8) {
+        self.status = value;
+    }
+    pub fn read_status(&mut self) -> u8 {
+        self.frame_counter = self.frame_counter & !0x40;
+        self.status = self.status | 0x1F;
+        self.status
+    }
+
+    pub fn write_frame_counter(&mut self, value: u8) {
+        self.frame_counter = value;
+    }
+
+    pub fn apu_irq_enabled(&self) -> bool {
+        return (self.frame_counter & 0x40) == 0;
+    }
+
+    pub fn apu_frame_count_interval(&self) -> usize {
+        if (self.frame_counter & 0x80) == 0 {
+            4
+        } else {
+            5
+        }
+    }
+
+    pub fn tick(&mut self, cycles: u8) -> u8 {
+        self.status = self.status & !0x40;
+        if !self.apu_irq_enabled() {
+            self.cycles = 0;
+            return 0;
+        }
+        self.cycles += cycles as usize;
+        // 7457を掛けたものが、インターバルになる。
+        // see: https://pgate1.at-ninja.jp/NES_on_FPGA/nes_apu.htm#frame
+        let interval = self.apu_frame_count_interval() * 7457;
+        let mut cnt = 0;
+        while self.cycles >= interval {
+            self.cycles -= interval;
+            self.status = self.status | 0x40;
+            cnt += 1;
+        }
+        return cnt;
     }
 }
 

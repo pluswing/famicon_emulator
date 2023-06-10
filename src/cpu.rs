@@ -253,9 +253,17 @@ impl<'a> CPU<'a> {
     where
         F: FnMut(&mut CPU),
     {
+        let mut cnt = 0;
         loop {
             if let Some(_nmi) = self.bus.poll_nmi_status() {
                 self.interrupt_nmi();
+            }
+            if cnt != 0 {
+                if self.status & FLAG_INTERRRUPT == 0 {
+                    info!("** APU IRQ **");
+                    self.brk(&AddressingMode::Implied);
+                    self.status = self.status | FLAG_INTERRRUPT;
+                }
             }
             let opscode = self.mem_read(self.program_counter);
             self.program_counter += 1;
@@ -283,13 +291,13 @@ impl<'a> CPU<'a> {
                         _ => {}
                     }
 
-                    self.bus.tick(op.cycles + self.add_cycles);
+                    cnt = self.bus.tick(op.cycles + self.add_cycles);
 
                     // if program_conter_state == self.program_counter {
                     //   self.program_counter += (op.len - 1) as u16
                     // }
                 }
-                _ => {} // panic!("no implementation {:<02X}", opscode),
+                _ => panic!("no implementation {:<02X}", opscode),
             }
         }
     }
