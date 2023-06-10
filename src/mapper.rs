@@ -212,7 +212,49 @@ impl Mapper for Mapper1 {
     }
 }
 
+// UxROM
 pub struct Mapper2 {
+    prg_rom_size: usize,
+    prg_bank: u8,
+}
+
+impl Mapper2 {
+    pub fn new(prg_rom_size: usize) -> Self {
+        Mapper2 {
+            prg_rom_size: prg_rom_size,
+            prg_bank: 0x01,
+        }
+    }
+}
+
+impl Mapper for Mapper2 {
+    fn write(&mut self, addr: u16, data: u8) {
+        match addr {
+            0x8000..=0xFFFF => {
+                info!("MAPPER2 PRG_BANK={}", data & 0x0F);
+                self.prg_bank = data;
+            }
+            _ => panic!("can't be"),
+        }
+    }
+
+    fn mirror_prg_rom_addr(&self, addr: usize) -> usize {
+        let bank_len: usize = 16 * 1024;
+        let num = self.prg_bank as usize & 0x0F;
+        let last_bank = self.prg_rom_size / bank_len - 1;
+        match addr {
+            0x8000..=0xBFFF => addr + bank_len * num,
+            0xC000..=0xFFFF => (addr - bank_len) + bank_len * last_bank,
+            _ => panic!("can't be"),
+        }
+    }
+
+    fn mirror_chr_rom_addr(&mut self, addr: usize) -> usize {
+        addr
+    }
+}
+// MMC2 = Mapper9だった。。
+pub struct Mapper9 {
     prg_rom_size: usize,
 
     prg_bank: u8,
@@ -225,11 +267,11 @@ pub struct Mapper2 {
     mirroring: u8,
 }
 
-impl Mapper2 {
+impl Mapper9 {
     pub fn new(prg_rom_size: usize) -> Self {
-        Mapper2 {
+        Mapper9 {
             prg_rom_size: prg_rom_size,
-            prg_bank: 0,
+            prg_bank: 0x01,
             chr_bank0: 0,
             chr_bank1: 0,
             latch0: 0xFD,
@@ -241,27 +283,27 @@ impl Mapper2 {
     }
 }
 
-impl Mapper for Mapper2 {
+impl Mapper for Mapper9 {
     fn write(&mut self, addr: u16, data: u8) {
         match addr {
             0xA000..=0xAFFF => {
-                info!("MAPPER2 PRG_BANK={}", data & 0x0F);
+                info!("MAPPER9 PRG_BANK={}", data & 0x0F);
                 self.prg_bank = data;
             }
             0xB000..=0xBFFF => {
-                info!("MAPPER2 CHR_BANK0={}", data & 0x1F);
+                info!("MAPPER9 CHR_BANK0={}", data & 0x1F);
                 self.chr_bank0 = data;
             }
             0xC000..=0xCFFF => {
-                info!("MAPPER2 CHR_BANK1={}", data & 0x1F);
+                info!("MAPPER9 CHR_BANK1={}", data & 0x1F);
                 self.chr_bank1 = data;
             }
             0xD000..=0xDFFF => {
-                info!("MAPPER2 CHR_BANK2={}", data & 0x1F);
+                info!("MAPPER9 CHR_BANK2={}", data & 0x1F);
                 self.chr_bank2 = data;
             }
             0xE000..=0xEFFF => {
-                info!("MAPPER2 CHR_BANK3={}", data & 0x1F);
+                info!("MAPPER9 CHR_BANK3={}", data & 0x1F);
                 self.chr_bank3 = data;
             }
             0xF000..=0xFFFF => {
@@ -312,7 +354,8 @@ impl Mapper for Mapper2 {
     }
 }
 
-pub struct Mapper4 {
+// MMC4 = Mapper10だった。。。
+pub struct Mapper10 {
     prg_rom_size: usize,
 
     prg_bank: u8,
@@ -325,9 +368,9 @@ pub struct Mapper4 {
     mirroring: u8,
 }
 
-impl Mapper4 {
+impl Mapper10 {
     pub fn new(prg_rom_size: usize) -> Self {
-        Mapper4 {
+        Mapper10 {
             prg_rom_size: prg_rom_size,
             prg_bank: 0,
             chr_bank0: 0,
@@ -341,9 +384,9 @@ impl Mapper4 {
     }
 }
 
-impl Mapper for Mapper4 {
+impl Mapper for Mapper10 {
     fn write(&mut self, addr: u16, data: u8) {
-        info!("MAPPER4 w: {:04X}", addr);
+        info!("MAPPER10 w: {:04X}", addr);
         match addr {
             0x8000 => {
                 self.prg_bank = data;
@@ -367,7 +410,7 @@ impl Mapper for Mapper4 {
                 self.mirroring = data;
             }
             _ => {
-                warn!("MAPPER4 write access: {:04X} => {:04X}", addr, data)
+                warn!("MAPPER10 write access: {:04X} => {:04X}", addr, data)
                 // panic!("can't be"),
             }
         }
