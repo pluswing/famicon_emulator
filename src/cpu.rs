@@ -985,7 +985,7 @@ pub fn trace(cpu: &mut CPU) -> String {
     for _ in 0..(0xFF - cpu.stack_pointer) {
         offset_space = offset_space + " ";
     }
-    println!(
+    trace!(
         "{:<20}{}${:}: {:<8} {}",
         status,
         offset_space,
