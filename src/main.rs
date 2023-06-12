@@ -14,7 +14,7 @@ mod ppu;
 mod render;
 mod rom;
 
-use crate::cartridge::test::{dq2_rom, dq3_rom};
+use crate::cartridge::test::{dq2_rom, dq3_rom, dq4_rom, ff3_rom};
 use crate::cpu::{trace, IN_TRACE};
 use crate::mapper::{mapper_from_rom, Mapper0, Mapper1};
 
@@ -27,7 +27,7 @@ use cartridge::test::{alter_ego_rom, mario_rom, test_rom};
 use frame::{show_tile, Frame};
 use joypad::Joypad;
 use log::{debug, info, log_enabled, trace, Level};
-use mapper::{Mapper, Mapper2};
+use mapper::{Mapper, Mapper2, Mapper4};
 use ppu::NesPPU;
 use rand::Rng;
 use sdl2::event::Event;
@@ -38,9 +38,19 @@ use sdl2::EventPump;
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::Mutex;
+use std::time::Duration;
 
 lazy_static! {
-    pub static ref MAPPER: Mutex::<Box<Mapper2>> = Mutex::new(Box::new(Mapper2::new(128 * 1024)));
+    // DQ2
+    // pub static ref MAPPER: Mutex::<Box<Mapper2>> = Mutex::new(Box::new(Mapper2::new(128 * 1024)));
+
+    // DQ3
+    // pub static ref MAPPER: Mutex::<Box<Mapper1>> = Mutex::new(Box::new(Mapper1::new(256 * 1024)));
+    // DQ4
+    // pub static ref MAPPER: Mutex::<Box<Mapper1>> = Mutex::new(Box::new(Mapper1::new(512 * 1024)));
+
+    // FF3
+    pub static ref MAPPER: Mutex::<Box<Mapper4>> = Mutex::new(Box::new(Mapper4::new(512 * 1024)));
 }
 
 fn main() {
@@ -89,9 +99,11 @@ fn main() {
     let rom = load_rom("rom/nes-test-roms/cpu_exec_space/test_cpu_exec_space_ppuio.nes");
     let rom = load_rom("rom/nes-test-roms/blargg_litewall/blargg_litewall-10c.nes");
     let rom = load_rom("rom/Championship Lode Runner (Japan).nes");
-    let rom = dq3_rom();
     let rom = mario_rom();
+    let rom = dq4_rom();
+    let rom = dq3_rom();
     let rom = dq2_rom();
+    let rom = ff3_rom();
 
     info!(
         "ROM: mapper={}, mirroring={:?} chr_ram={} PRG={}KB, CHR={}KB",
@@ -131,6 +143,7 @@ fn main() {
                 _ => { /* do nothing */ }
             }
         }
+        std::thread::sleep(Duration::from_millis(10));
     });
 
     let mut cpu = CPU::new(bus);

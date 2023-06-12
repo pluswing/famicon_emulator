@@ -37,4 +37,12 @@ pub mod test {
     pub fn dq2_rom() -> Rom {
         load_rom("rom/Dragon Quest II - Akuryou no Kamigami (Japan).nes")
     }
+
+    pub fn dq4_rom() -> Rom {
+        load_rom("rom/Dragon Quest IV - Michibikareshi Monotachi (Japan) (Rev 1).nes")
+    }
+
+    pub fn ff3_rom() -> Rom {
+        load_rom("rom/Final Fantasy III (Japan).nes")
+    }
 }

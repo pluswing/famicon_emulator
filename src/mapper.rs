@@ -11,7 +11,7 @@ pub fn mapper_from_rom(rom: &Rom) -> Box<dyn Mapper> {
         0 => Box::new(Mapper0::new(rom.prg_rom.len())), // SMB ...
         1 => Box::new(Mapper1::new(rom.prg_rom.len())), // DQ3 (1B), DQ4 (1B)
         2 => Box::new(Mapper2::new(rom.prg_rom.len())), // DQ2 (2H)
-        // 4 => Box::new(Mapper4::new(rom.prg_rom.len())), // FF3 (4BH)
+        4 => Box::new(Mapper4::new(rom.prg_rom.len())), // FF3 (4BH)
         _ => panic!("mapper = {} is not support.", rom.mapper),
     }
 }
@@ -253,6 +253,195 @@ impl Mapper for Mapper2 {
         addr
     }
 }
+
+// FIXME IRQ実装がまだ。
+pub struct Mapper4 {
+    prg_rom_size: usize,
+    bank_select: u8,
+    bank_data: [u8; 8],
+    mirroring: u8,
+    prg_ram_protect: u8, // 実装しなくて良いらしい
+    irq_latch: u8,
+    irq_reload: bool,
+    irq_enable: bool,
+}
+
+impl Mapper4 {
+    pub fn new(prg_rom_size: usize) -> Self {
+        Mapper4 {
+            prg_rom_size: prg_rom_size,
+            bank_select: 0,
+            bank_data: [0; 8],
+            mirroring: 0,
+            prg_ram_protect: 0,
+            irq_latch: 0,
+            irq_reload: false,
+            irq_enable: false,
+        }
+    }
+}
+
+impl Mapper for Mapper4 {
+    fn write(&mut self, addr: u16, data: u8) {
+        match addr {
+            0x8000..=0x9FFF => {
+                if (addr & 0x01) == 0 {
+                    self.bank_select = data;
+                } else {
+                    self.bank_data[(self.bank_select & 0x07) as usize] = data;
+                }
+            }
+            0xA000..=0xBFFF => {
+                if (addr & 0x01) == 0 {
+                    self.mirroring = data;
+                } else {
+                    self.prg_ram_protect = data;
+                }
+            }
+            0xC000..=0xDFFF => {
+                if (addr & 0x01) == 0 {
+                    self.irq_latch = data;
+                } else {
+                    self.irq_reload = true;
+                }
+            }
+            0xE000..=0xFFFF => {
+                if (addr & 0x01) == 0 {
+                    self.irq_enable = false;
+                } else {
+                    self.irq_enable = true;
+                }
+            }
+            _ => panic!("can't be"),
+        }
+    }
+
+    fn mirror_prg_rom_addr(&self, addr: usize) -> usize {
+        let d6 = (self.bank_select & 0x40) >> 6;
+        let bank_len: usize = 8 * 1024;
+        let bank_max = self.prg_rom_size / bank_len;
+        match addr {
+            0x8000..=0x9FFF => {
+                if d6 == 0 {
+                    // R6
+                    addr + self.bank_data[6] as usize * bank_len
+                } else {
+                    // (-2) // 最後から 2 番目のバンク
+                    addr + (bank_max - 2) * bank_len
+                }
+            }
+            0xA000..=0xBFFF => {
+                if d6 == 0 {
+                    // R7
+                    addr - bank_len + self.bank_data[7] as usize * bank_len
+                } else {
+                    // R7
+                    addr - bank_len + self.bank_data[7] as usize * bank_len
+                }
+            }
+            0xC000..=0xDFFF => {
+                if d6 == 0 {
+                    // (-2)
+                    addr - (bank_len * 2) + (bank_max - 2) * bank_len
+                } else {
+                    // R6
+                    addr - (bank_len * 2) + self.bank_data[6] as usize * bank_len
+                }
+            }
+            0xE000..=0xFFFF => {
+                if d6 == 0 {
+                    // (-1) // 最後のバンク
+                    addr - (bank_len * 3) + (bank_max - 1) * bank_len
+                } else {
+                    // (-1)
+                    addr - (bank_len * 3) + (bank_max - 1) * bank_len
+                }
+            }
+            _ => panic!("can't be"),
+        }
+    }
+
+    fn mirror_chr_rom_addr(&mut self, addr: usize) -> usize {
+        let d7 = (self.bank_select & 0x80) >> 7;
+        let bank_len: usize = 1 * 1024;
+        match addr {
+            0x0000..=0x03FF => {
+                if d7 == 0 {
+                    // R0 (lower)
+                    addr + self.bank_data[0] as usize * bank_len
+                } else {
+                    // R2
+                    addr + self.bank_data[2] as usize * bank_len
+                }
+            }
+            0x0400..=0x07FF => {
+                if d7 == 0 {
+                    // R0 (upper)
+                    addr - bank_len + self.bank_data[0] as usize * bank_len + bank_len
+                } else {
+                    // R3
+                    addr - bank_len + self.bank_data[3] as usize * bank_len
+                }
+            }
+            0x0800..=0x0BFF => {
+                if d7 == 0 {
+                    // R1 (lower)
+                    addr - (bank_len * 2) + self.bank_data[1] as usize * bank_len
+                } else {
+                    // R4
+                    addr - (bank_len * 2) + self.bank_data[4] as usize * bank_len
+                }
+            }
+            0x0C00..=0x0FFF => {
+                if d7 == 0 {
+                    // R1 (upper)
+                    addr - (bank_len * 3) + self.bank_data[1] as usize * bank_len + bank_len
+                } else {
+                    // R5
+                    addr - (bank_len * 3) + self.bank_data[5] as usize * bank_len
+                }
+            }
+            0x1000..=0x13FF => {
+                if d7 == 0 {
+                    // R2
+                    addr - (bank_len * 4) + self.bank_data[2] as usize * bank_len
+                } else {
+                    // R0 (lower)
+                    addr - (bank_len * 4) + self.bank_data[0] as usize * bank_len
+                }
+            }
+            0x1400..=0x17FF => {
+                if d7 == 0 {
+                    // R3
+                    addr - (bank_len * 5) + self.bank_data[3] as usize * bank_len
+                } else {
+                    // R0 (upper)
+                    addr - (bank_len * 5) + self.bank_data[0] as usize * bank_len + bank_len
+                }
+            }
+            0x1800..=0x1BFF => {
+                if d7 == 0 {
+                    // R4
+                    addr - (bank_len * 6) + self.bank_data[4] as usize * bank_len
+                } else {
+                    // R1 (lower)
+                    addr - (bank_len * 6) + self.bank_data[1] as usize * bank_len
+                }
+            }
+            0x1C00..=0x1FFF => {
+                if d7 == 0 {
+                    // R5
+                    addr - (bank_len * 7) + self.bank_data[5] as usize * bank_len
+                } else {
+                    // R1 (upper)
+                    addr - (bank_len * 7) + self.bank_data[1] as usize * bank_len + bank_len
+                }
+            }
+            _ => panic!("can't be"),
+        }
+    }
+}
+
 // MMC2 = Mapper9だった。。
 pub struct Mapper9 {
     prg_rom_size: usize,
