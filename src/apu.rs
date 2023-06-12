@@ -5,10 +5,10 @@ pub struct NesAPU {
     ch4_register: Ch4Register,
 
     ch1_device: AudioDevice<SquareWave>,
-    ch1_sender: Sender<SquareNote>,
+    ch1_sender: Sender<SquareEvent>,
 
     ch2_device: AudioDevice<SquareWave>,
-    ch2_sender: Sender<SquareNote>,
+    ch2_sender: Sender<SquareEvent>,
 
     ch3_device: AudioDevice<TriangleWave>,
     ch3_sender: Sender<TriangleNote>,
@@ -60,28 +60,34 @@ impl NesAPU {
     pub fn write1ch(&mut self, addr: u16, value: u8) {
         self.ch1_register.write(addr, value);
 
-        let duty = match self.ch1_register.duty() {
+        let duty = match self.ch1_register.duty {
             0x00 => 0.125,
             0x01 => 0.25,
             0x02 => 0.50,
             0x03 => 0.75,
-            _ => panic!(
-                "can't be {} {:02X}",
-                self.ch1_register.duty(),
-                self.ch1_register.tone_volume,
-            ),
+            _ => panic!("can't be"),
         };
 
-        let volume = (self.ch1_register.volume() as f32) / 15.0;
+        let volume = (self.ch1_register.volume as f32) / 15.0;
 
-        let hz = NES_CPU_CLOCK / (16.0 * (self.ch1_register.hz() as f32 + 1.0));
+        let hz = NES_CPU_CLOCK / (16.0 * (self.ch1_register.frequency as f32 + 1.0));
+
+        if addr == 0x4000 {
+            // change envelop
+            self.ch1_sender
+                .send(SquareEvent::Envelope(Envelope::new(
+                    self.ch1_register.volume,
+                    self.ch1_register.envelope_flag,
+                )))
+                .unwrap();
+        }
 
         self.ch1_sender
-            .send(SquareNote {
+            .send(SquareEvent::Note(SquareNote {
                 hz: hz,
                 volume: volume,
                 duty: duty,
-            })
+            }))
             .unwrap();
     }
 
@@ -101,18 +107,18 @@ impl NesAPU {
         let hz = NES_CPU_CLOCK / (16.0 * (self.ch2_register.frequency as f32 + 1.0));
 
         self.ch2_sender
-            .send(SquareNote {
+            .send(SquareEvent::Note(SquareNote {
                 hz: hz,
                 volume: volume,
                 duty: duty,
-            })
+            }))
             .unwrap();
     }
 
     pub fn write3ch(&mut self, addr: u16, value: u8) {
         self.ch3_register.write(addr, value);
 
-        let hz = NES_CPU_CLOCK / (16.0 * (self.ch2_register.frequency as f32 + 1.0));
+        let hz = NES_CPU_CLOCK / (32.0 * (self.ch2_register.frequency as f32 + 1.0));
 
         self.ch3_sender.send(TriangleNote { hz: hz }).unwrap();
     }
@@ -182,49 +188,60 @@ impl NesAPU {
 }
 
 struct Ch1Register {
-    pub tone_volume: u8,
-    sweep: u8,
-    hz_low: u8,
-    hz_high_key_on: u8,
+    volume: u8,
+    envelope_flag: bool,
+    key_off_counter_flag: bool,
+    duty: u8,
+
+    sweep_change_amount: u8,
+    sweep_direction: u8,
+    sweep_timer_count: u8,
+    sweep_enabled: u8,
+
+    frequency: u16,
+
+    key_off_count: u8,
 }
 
 impl Ch1Register {
     pub fn new() -> Self {
         Ch1Register {
-            tone_volume: 0x00,
-            sweep: 0x00,
-            hz_low: 0x00,
-            hz_high_key_on: 0x00,
+            volume: 0,
+            envelope_flag: false,
+            key_off_counter_flag: false,
+            duty: 0,
+
+            sweep_change_amount: 0,
+            sweep_direction: 0,
+            sweep_timer_count: 0,
+            sweep_enabled: 0,
+
+            frequency: 0,
+
+            key_off_count: 0,
         }
-    }
-
-    pub fn duty(&self) -> u8 {
-        // 00：12.5%　01：25%　10：50%　11：75%
-        (self.tone_volume & 0xC0) >> 6
-    }
-
-    pub fn volume(&self) -> u8 {
-        // （0で消音、15が最大）
-        self.tone_volume & 0x0F
-    }
-
-    pub fn hz(&self) -> u16 {
-        (self.hz_high_key_on as u16 & 0x07 << 8) | (self.hz_low as u16)
     }
 
     pub fn write(&mut self, addr: u16, value: u8) {
         match addr {
             0x4000 => {
-                self.tone_volume = value;
+                self.volume = value & 0x0F;
+                self.envelope_flag = (value & 0x10) == 0;
+                self.key_off_counter_flag = (value & 0x20) == 0;
+                self.duty = (value & 0xC0) >> 6;
             }
             0x4001 => {
-                self.sweep = value;
+                self.sweep_change_amount = value & 0x07;
+                self.sweep_direction = (value & 0x08) >> 3;
+                self.sweep_timer_count = (value & 0x70) >> 4;
+                self.sweep_enabled = (value & 0x80) >> 7;
             }
             0x4002 => {
-                self.hz_low = value;
+                self.frequency = (self.frequency & 0x0700) | value as u16;
             }
             0x4003 => {
-                self.hz_high_key_on = value;
+                self.frequency = (self.frequency & 0x00FF) | (value as u16 & 0x07) << 8;
+                self.key_off_count = (value & 0xF8) >> 3;
             }
             _ => panic!("can't be"),
         }
@@ -388,6 +405,73 @@ use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
 
+struct FrameSequencer {
+    counter: usize,
+    interval: usize,
+}
+
+impl FrameSequencer {
+    fn new(interval: usize) -> Self {
+        FrameSequencer {
+            counter: 0,
+            interval,
+        }
+    }
+    fn next(&mut self) -> bool {
+        self.counter += 1;
+        if self.counter >= self.interval {
+            self.counter = 0;
+            return true;
+        }
+        return false;
+    }
+}
+
+struct Envelope {
+    interval: u8,
+    counter: u8,
+    volume: u8,
+    loop_flag: bool,
+    sequencer: FrameSequencer,
+}
+
+impl Envelope {
+    fn new(rate: u8, loop_flag: bool) -> Self {
+        Envelope {
+            interval: rate,
+            counter: 0,
+            volume: 0x0F,
+            loop_flag: loop_flag,
+            sequencer: FrameSequencer::new(44100 / 240),
+        }
+    }
+
+    fn reset(&mut self) {
+        self.counter = 0;
+        self.volume = 0x0F;
+    }
+
+    fn next(&mut self) -> f32 {
+        if !self.sequencer.next() {
+            return self.volume as f32 / 15.0;
+        }
+        if self.volume == 0 {
+            return 0.0;
+        }
+        self.counter += 1;
+        if self.counter >= self.interval {
+            self.volume -= 1;
+        }
+        let v = self.volume;
+        if self.volume <= 0 {
+            if self.loop_flag {
+                self.reset()
+            }
+        }
+        v as f32 / 15.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 struct SquareNote {
     hz: f32,
@@ -395,10 +479,16 @@ struct SquareNote {
     duty: f32,
 }
 
+enum SquareEvent {
+    Note(SquareNote),
+    Envelope(Envelope),
+}
+
 struct SquareWave {
     freq: f32,
     phase: f32,
-    receiver: Receiver<SquareNote>,
+    receiver: Receiver<SquareEvent>,
+    envelope: Envelope,
     note: SquareNote,
 }
 
@@ -409,23 +499,25 @@ impl AudioCallback for SquareWave {
         for x in out.iter_mut() {
             let res = self.receiver.recv_timeout(Duration::from_millis(0));
             match res {
-                Ok(note) => self.note = note,
+                Ok(SquareEvent::Note(note)) => self.note = note,
+                Ok(SquareEvent::Envelope(e)) => self.envelope = e,
                 Err(_) => {}
             }
+            let volume = self.envelope.next();
             *x = if self.phase <= self.note.duty {
-                self.note.volume
+                volume
             } else {
-                -self.note.volume
+                -volume
             };
             self.phase = (self.phase + self.note.hz / self.freq) % 1.0;
         }
     }
 }
 
-fn init_square(sdl_context: &sdl2::Sdl) -> (AudioDevice<SquareWave>, Sender<SquareNote>) {
+fn init_square(sdl_context: &sdl2::Sdl) -> (AudioDevice<SquareWave>, Sender<SquareEvent>) {
     let audio_subsystem = sdl_context.audio().unwrap();
 
-    let (sender, receiver) = channel::<SquareNote>();
+    let (sender, receiver) = channel::<SquareEvent>();
 
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
@@ -438,6 +530,7 @@ fn init_square(sdl_context: &sdl2::Sdl) -> (AudioDevice<SquareWave>, Sender<Squa
             freq: spec.freq as f32,
             phase: 0.0,
             receiver: receiver,
+            envelope: Envelope::new(1, false),
             note: SquareNote {
                 hz: 0.0,
                 volume: 0.0,
@@ -478,7 +571,7 @@ impl AudioCallback for TriangleWave {
             } else {
                 1.0 - self.phase
             } - 0.25)
-                * 2.0; // volume
+                * 4.0; // volume
             self.phase = (self.phase + self.note.hz / self.freq) % 1.0;
         }
     }
