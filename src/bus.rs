@@ -44,19 +44,19 @@ impl<'call> Bus<'call> {
         self.prg_rom[mirrored]
     }
 
-    pub fn tick(&mut self, cycles: u8) -> u8 {
+    pub fn tick(&mut self, cycles: u8) -> bool {
         self.cycles += cycles as usize;
 
         let nmi_before = self.ppu.nmi_interrupt.is_some();
         self.ppu.tick(cycles * 3);
         let nmi_after = self.ppu.nmi_interrupt.is_some();
 
-        let cnt = self.apu.tick(cycles);
+        let ret = self.apu.tick(cycles);
 
         if !nmi_before && nmi_after {
             (self.gameloop_callback)(&self.ppu, &mut self.joypad1);
         }
-        cnt
+        ret
     }
 
     pub fn poll_nmi_status(&mut self) -> Option<i32> {

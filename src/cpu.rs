@@ -253,17 +253,13 @@ impl<'a> CPU<'a> {
     where
         F: FnMut(&mut CPU),
     {
-        let mut cnt = 0;
+        let mut apu_irq = false;
         loop {
             if let Some(_nmi) = self.bus.poll_nmi_status() {
                 self.interrupt_nmi();
             }
-            if cnt != 0 {
-                if self.status & FLAG_INTERRRUPT == 0 {
-                    info!("** APU IRQ **");
-                    self.brk(&AddressingMode::Implied);
-                    self.status = self.status | FLAG_INTERRRUPT;
-                }
+            if apu_irq {
+                self.apu_irq();
             }
             let opscode = self.mem_read(self.program_counter);
             self.program_counter += 1;
@@ -291,7 +287,7 @@ impl<'a> CPU<'a> {
                         _ => {}
                     }
 
-                    cnt = self.bus.tick(op.cycles + self.add_cycles);
+                    apu_irq = self.bus.tick(op.cycles + self.add_cycles);
 
                     // if program_conter_state == self.program_counter {
                     //   self.program_counter += (op.len - 1) as u16
@@ -314,6 +310,22 @@ impl<'a> CPU<'a> {
         self.status = self.status | FLAG_INTERRRUPT;
         self.bus.tick(2);
         self.program_counter = self.mem_read_u16(0xFFFA);
+    }
+
+    fn apu_irq(&mut self) {
+        if self.status & FLAG_INTERRRUPT != 0 {
+            return;
+        }
+        info!("** APU IRQ **");
+
+        self._push_u16(self.program_counter + 1);
+        let mut status = self.status;
+        status = status & !FLAG_BREAK;
+        status = status | FLAG_BREAK2;
+        self._push(self.status);
+
+        self.status = self.status | FLAG_INTERRRUPT;
+        self.program_counter = self.mem_read_u16(0xFFFE);
     }
 
     fn find_ops(&mut self, opscode: u8) -> Option<OpCode> {

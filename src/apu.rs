@@ -167,23 +167,28 @@ impl NesAPU {
         }
     }
 
-    pub fn tick(&mut self, cycles: u8) -> u8 {
+    pub fn tick(&mut self, cycles: u8) -> bool {
         self.status = self.status & !0x40;
         if !self.apu_irq_enabled() {
             self.cycles = 0;
-            return 0;
+            return false;
         }
         self.cycles += cycles as usize;
         // 7457を掛けたものが、インターバルになる。
         // see: https://pgate1.at-ninja.jp/NES_on_FPGA/nes_apu.htm#frame
-        let interval = self.apu_frame_count_interval() * 7457;
-        let mut cnt = 0;
+        let fci = self.apu_frame_count_interval();
+        if fci == 5 {
+            // ==5の場合、IRQは発生しない
+            self.cycles = 0;
+            return false;
+        }
+        let interval = fci * 7457 * 4; // 60Hzで割り込みが発生する
         while self.cycles >= interval {
             self.cycles -= interval;
             self.status = self.status | 0x40;
-            cnt += 1;
+            return true;
         }
-        return cnt;
+        return false;
     }
 }
 
