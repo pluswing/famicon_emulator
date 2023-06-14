@@ -2,7 +2,7 @@
 // mapper2 = DQ2
 // mapper3 = bad apple
 
-use log::{info, trace, warn};
+use log::{debug, info, trace, warn};
 
 use crate::rom::Rom;
 
@@ -97,7 +97,7 @@ impl Mapper1 {
     pub fn new(prg_rom_size: usize) -> Self {
         Mapper1 {
             prg_rom_size: prg_rom_size,
-            shift_register: 0,
+            shift_register: 0x10,
             write_count: 0,
             mirroring: Mirroring::Lower,
             prg_rom_bank_mode: PrgRomBankMode::LastBankIsC,
@@ -109,7 +109,7 @@ impl Mapper1 {
     }
 
     fn reset_shift_register(&mut self) {
-        self.shift_register = 0;
+        self.shift_register = 0x10;
         self.write_count = 0;
     }
 }
@@ -122,7 +122,7 @@ impl Mapper for Mapper1 {
         }
 
         self.shift_register = self.shift_register >> 1;
-        self.shift_register = self.shift_register | ((data & 0x01) << 4);
+        self.shift_register = (self.shift_register | ((data & 0x01) << 4)) & 0x1F;
         self.write_count += 1;
 
         if self.write_count == 5 {
@@ -147,19 +147,19 @@ impl Mapper for Mapper1 {
                         3 => Mirroring::Horizontal,
                         _ => panic!("can't be"),
                     };
-                    info!("MAPPER1: control: mirroring={:?}, prg_rom_bank_mode={:?}, chr_rom_bank_mode={:?}", self.mirroring, self.prg_rom_bank_mode, self.chr_rom_bank_mode);
+                    info!("MAPPER1: W:{:04X}, control: mirroring={:?}, prg_rom_bank_mode={:?}, chr_rom_bank_mode={:?}", addr, self.mirroring, self.prg_rom_bank_mode, self.chr_rom_bank_mode);
                 }
                 0xA000..=0xBFFF => {
-                    self.chr_bank0 = v;
-                    info!("MAPPER1: CHR_BANK0={:02X}", v & 0x1F)
+                    self.chr_bank0 = v & 0x1F;
+                    info!("MAPPER1: W:{:04X}, CHR_BANK0={:02X}", addr, v & 0x1F)
                 }
                 0xC000..=0xDFFF => {
-                    self.chr_bank1 = v;
-                    info!("MAPPER1: CHR_BANK1={:02X}", v & 0x1F)
+                    self.chr_bank1 = v & 0x1F;
+                    info!("MAPPER1: W:{:04X}, CHR_BANK1={:02X}", addr, v & 0x1F)
                 }
                 0xE000..=0xFFFF => {
-                    self.prg_bank = v;
-                    info!("MAPPER1: PRG_BANK={:02X}", v & 0x0F)
+                    self.prg_bank = v & 0x1F;
+                    info!("MAPPER1: W:{:04X}, PRG_BANK={:02X}", addr, v & 0x0E)
                 }
                 _ => panic!("can't be"),
             };
@@ -195,16 +195,16 @@ impl Mapper for Mapper1 {
             ChrRomBankMode::Switch8Kb => {
                 // chr_bank0をみて、chr_bank1は無視。
                 let num = self.chr_bank0 as usize & 0x1E;
-                num * bank_len
+                addr + num * bank_len
             }
             ChrRomBankMode::Switch4Kb => match addr {
                 0x0000..=0x0FFF => {
                     let num = self.chr_bank0 as usize & 0x1F;
-                    num * bank_len
+                    addr + num * bank_len
                 }
                 0x1000..=0x1FFF => {
                     let num = self.chr_bank1 as usize & 0x1F;
-                    num * bank_len
+                    addr - bank_len + num * bank_len
                 }
                 _ => panic!("can't be"),
             },
@@ -244,7 +244,7 @@ impl Mapper for Mapper2 {
         let last_bank = self.prg_rom_size / bank_len - 1;
         match addr {
             0x8000..=0xBFFF => addr + bank_len * num,
-            0xC000..=0xFFFF => (addr - bank_len) + bank_len * last_bank,
+            0xC000..=0xFFFF => addr - bank_len + bank_len * last_bank,
             _ => panic!("can't be"),
         }
     }
@@ -286,8 +286,14 @@ impl Mapper for Mapper4 {
         match addr {
             0x8000..=0x9FFF => {
                 if (addr & 0x01) == 0 {
+                    info!("MAPPER4 bank_select: {:02X}", data);
                     self.bank_select = data;
                 } else {
+                    info!(
+                        "MAPPER4 bank_data({}) {:02X}",
+                        self.bank_select & 0x07,
+                        data
+                    );
                     self.bank_data[(self.bank_select & 0x07) as usize] = data;
                 }
             }
@@ -317,7 +323,7 @@ impl Mapper for Mapper4 {
     }
 
     fn mirror_prg_rom_addr(&self, addr: usize) -> usize {
-        let d6 = (self.bank_select & 0x40) >> 6;
+        let d6 = self.bank_select & 0x40;
         let bank_len: usize = 8 * 1024;
         let bank_max = self.prg_rom_size / bank_len;
         match addr {
@@ -362,82 +368,48 @@ impl Mapper for Mapper4 {
     }
 
     fn mirror_chr_rom_addr(&mut self, addr: usize) -> usize {
-        let d7 = (self.bank_select & 0x80) >> 7;
+        debug!("MAPPER4 mirror_chr_rom_addr => {:04X}", addr);
+        let d7 = self.bank_select & 0x80;
         let bank_len: usize = 1 * 1024;
-        match addr {
-            0x0000..=0x03FF => {
-                if d7 == 0 {
-                    // R0 (lower)
-                    addr + self.bank_data[0] as usize * bank_len
-                } else {
-                    // R2
-                    addr + self.bank_data[2] as usize * bank_len
-                }
+        let r0 = (self.bank_data[0] & 0xFE) as usize;
+        let r1 = (self.bank_data[1] & 0xFE) as usize;
+        let r2 = (self.bank_data[2] & 0xFF) as usize;
+        let r3 = (self.bank_data[3] & 0xFF) as usize;
+        let r4 = (self.bank_data[4] & 0xFF) as usize;
+        let r5 = (self.bank_data[5] & 0xFF) as usize;
+
+        if d7 == 0 {
+            match addr {
+                // R0 (2KB)
+                0x0000..=0x07FF => addr - (bank_len * 0) + r0 * bank_len,
+                // R1 (2KB)
+                0x0800..=0x0FFF => addr - (bank_len * 2) + r1 * bank_len,
+                // R2
+                0x1000..=0x13FF => addr - (bank_len * 4) + r2 * bank_len,
+                // R3
+                0x1400..=0x17FF => addr - (bank_len * 5) + r3 * bank_len,
+                // R4
+                0x1800..=0x1BFF => addr - (bank_len * 6) + r4 * bank_len,
+                // R5
+                0x1C00..=0x1FFF => addr - (bank_len * 7) + r5 * bank_len,
+                _ => panic!("can't be"),
             }
-            0x0400..=0x07FF => {
-                if d7 == 0 {
-                    // R0 (upper)
-                    addr - bank_len + self.bank_data[0] as usize * bank_len + bank_len
-                } else {
-                    // R3
-                    addr - bank_len + self.bank_data[3] as usize * bank_len
-                }
+        } else {
+            match addr {
+                // R2
+                0x0000..=0x03FF => addr - (bank_len * 0) + r2 * bank_len,
+                // R3
+                0x0400..=0x07FF => addr - (bank_len * 1) + r3 * bank_len,
+                // R4
+                0x0800..=0x0BFF => addr - (bank_len * 2) + r4 * bank_len,
+                // R5
+                0x0C00..=0x0FFF => addr - (bank_len * 3) + r5 * bank_len,
+                // R0 (2KB)
+                0x1000..=0x17FF => addr - (bank_len * 4) + r0 * bank_len,
+                // R1 (2KB)
+                0x1800..=0x1FFF => addr - (bank_len * 6) + r1 * bank_len,
+                _ => panic!("can't be"),
             }
-            0x0800..=0x0BFF => {
-                if d7 == 0 {
-                    // R1 (lower)
-                    addr - (bank_len * 2) + self.bank_data[1] as usize * bank_len
-                } else {
-                    // R4
-                    addr - (bank_len * 2) + self.bank_data[4] as usize * bank_len
-                }
-            }
-            0x0C00..=0x0FFF => {
-                if d7 == 0 {
-                    // R1 (upper)
-                    addr - (bank_len * 3) + self.bank_data[1] as usize * bank_len + bank_len
-                } else {
-                    // R5
-                    addr - (bank_len * 3) + self.bank_data[5] as usize * bank_len
-                }
-            }
-            0x1000..=0x13FF => {
-                if d7 == 0 {
-                    // R2
-                    addr - (bank_len * 4) + self.bank_data[2] as usize * bank_len
-                } else {
-                    // R0 (lower)
-                    addr - (bank_len * 4) + self.bank_data[0] as usize * bank_len
-                }
-            }
-            0x1400..=0x17FF => {
-                if d7 == 0 {
-                    // R3
-                    addr - (bank_len * 5) + self.bank_data[3] as usize * bank_len
-                } else {
-                    // R0 (upper)
-                    addr - (bank_len * 5) + self.bank_data[0] as usize * bank_len + bank_len
-                }
-            }
-            0x1800..=0x1BFF => {
-                if d7 == 0 {
-                    // R4
-                    addr - (bank_len * 6) + self.bank_data[4] as usize * bank_len
-                } else {
-                    // R1 (lower)
-                    addr - (bank_len * 6) + self.bank_data[1] as usize * bank_len
-                }
-            }
-            0x1C00..=0x1FFF => {
-                if d7 == 0 {
-                    // R5
-                    addr - (bank_len * 7) + self.bank_data[5] as usize * bank_len
-                } else {
-                    // R1 (upper)
-                    addr - (bank_len * 7) + self.bank_data[1] as usize * bank_len + bank_len
-                }
-            }
-            _ => panic!("can't be"),
         }
     }
 }

@@ -1,9 +1,10 @@
 use log::{debug, info};
 
 use crate::frame::Frame;
-use crate::palette;
+use crate::mapper::Mapper;
 use crate::ppu::NesPPU;
 use crate::rom::Mirroring;
+use crate::{palette, MAPPER};
 
 struct Rect {
     x1: usize,
@@ -104,8 +105,11 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
 
         let bank: u16 = ppu.ctrl.sprite_pattern_addr();
 
-        let tile =
-            &ppu.chr_rom[(bank + tile_idx * 16) as usize..=(bank + tile_idx * 16 + 15) as usize];
+        let start = MAPPER
+            .lock()
+            .unwrap()
+            .mirror_chr_rom_addr((bank + tile_idx * 16) as usize);
+        let tile = &ppu.chr_rom[start..=(start + 15)];
 
         for y in 0..=7 {
             let mut upper = tile[y];
@@ -181,8 +185,11 @@ fn render_name_table(
         let tile_column = i % 32;
         let tile_row = i / 32;
         let tile_idx = name_table[i] as u16;
-        let tile =
-            &ppu.chr_rom[(bank + tile_idx * 16) as usize..=(bank + tile_idx * 16 + 15) as usize];
+        let start = MAPPER
+            .lock()
+            .unwrap()
+            .mirror_chr_rom_addr((bank + tile_idx * 16) as usize);
+        let tile = &ppu.chr_rom[start..=(start + 15)];
         let palette = bg_pallette(ppu, attribute_table, tile_column, tile_row);
 
         for y in 0..=7 {
