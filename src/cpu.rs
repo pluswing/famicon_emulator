@@ -167,8 +167,16 @@ impl<'a> CPU<'a> {
             // JMP -> same Absolute
             AddressingMode::Indirect => {
                 let base = self.mem_read_u16(self.program_counter);
-                let addr = self.mem_read_u16(base);
-                addr
+
+                // let addr = self.mem_read_u16(base);
+                if (base & 0xFF) == 0xFF {
+                    debug!("[JMP Indirect] page boundary. {:04X}", base);
+                    let lo = self.mem_read(base) as u16;
+                    let hi = self.mem_read(base & 0xFF00) as u16;
+                    (hi << 8) | (lo as u16)
+                } else {
+                    self.mem_read_u16(base)
+                }
             }
 
             // LDA ($44,X) => a1 44
@@ -205,13 +213,6 @@ impl<'a> CPU<'a> {
     }
 
     pub fn mem_read_u16(&mut self, pos: u16) -> u16 {
-        // FIXME
-        if pos == 0x00FF || pos == 0x02FF {
-            debug!("mem_read_u16 page boundary. {:04X}", pos);
-            let lo = self.mem_read(pos) as u16;
-            let hi = self.mem_read(pos & 0xFF00) as u16;
-            return (hi << 8) | (lo as u16);
-        }
         let lo = self.mem_read(pos) as u16;
         let hi = self.mem_read(pos + 1) as u16;
         (hi << 8) | (lo as u16)
