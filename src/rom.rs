@@ -15,6 +15,7 @@ pub struct Rom {
     pub chr_rom: Vec<u8>,
     pub mapper: u8,
     pub screen_mirroring: Mirroring,
+    pub is_chr_ram: bool,
 }
 
 impl Rom {
@@ -46,11 +47,20 @@ impl Rom {
         let prg_rom_start = 16 + if skip_trainer { 512 } else { 0 };
         let chr_rom_start = prg_rom_start + prg_rom_size;
 
+        let chr_rom = if chr_rom_size == 0 {
+            // chr_rom_size=0の場合、8KBのCHR_RAMが存在する
+            let blank_chr_ram: Vec<u8> = vec![0; CHR_ROM_PAGE_SIZE];
+            blank_chr_ram
+        } else {
+            raw[chr_rom_start..(chr_rom_start + chr_rom_size)].to_vec()
+        };
+
         Ok(Rom {
             prg_rom: raw[prg_rom_start..(prg_rom_start + prg_rom_size)].to_vec(),
-            chr_rom: raw[chr_rom_start..(chr_rom_start + chr_rom_size)].to_vec(),
+            chr_rom: chr_rom,
             mapper: mapper,
             screen_mirroring: screen_mirroring,
+            is_chr_ram: chr_rom_size == 0,
         })
     }
 
@@ -60,6 +70,7 @@ impl Rom {
             chr_rom: vec![],
             mapper: 0,
             screen_mirroring: Mirroring::VERTICAL,
+            is_chr_ram: false,
         };
     }
 }

@@ -1,3 +1,5 @@
+use log::{debug, info, trace};
+
 use crate::opscodes::{call, CPU_OPS_CODES};
 
 use crate::bus::{Bus, Mem};
@@ -82,6 +84,8 @@ pub struct CPU<'a> {
 
     add_cycles: u8,
 }
+
+pub static mut IN_TRACE: bool = false;
 
 impl Mem for CPU<'_> {
     fn mem_read(&mut self, addr: u16) -> u8 {
@@ -203,6 +207,7 @@ impl<'a> CPU<'a> {
     pub fn mem_read_u16(&mut self, pos: u16) -> u16 {
         // FIXME
         if pos == 0x00FF || pos == 0x02FF {
+            debug!("mem_read_u16 page boundary. {:04X}", pos);
             let lo = self.mem_read(pos) as u16;
             let hi = self.mem_read(pos & 0xFF00) as u16;
             return (hi << 8) | (lo as u16);
@@ -259,24 +264,6 @@ impl<'a> CPU<'a> {
             match op {
                 Some(op) => {
                     self.add_cycles = 0;
-                    if op.bytes == 1 {
-                        println!("OP: {} {:?}", op.name, op.addressing_mode);
-                    } else if op.bytes == 2 {
-                        println!(
-                            "OP: {} {:02X} {:?}",
-                            op.name,
-                            self.mem_read(self.program_counter),
-                            op.addressing_mode
-                        );
-                    } else if op.bytes == 3 {
-                        println!(
-                            "OP: {} {:02X}{:02X} {:?}",
-                            op.name,
-                            self.mem_read(self.program_counter),
-                            self.mem_read(self.program_counter + 1),
-                            op.addressing_mode
-                        );
-                    }
 
                     callback(self);
                     call(self, &op);
@@ -308,6 +295,7 @@ impl<'a> CPU<'a> {
     }
 
     fn interrupt_nmi(&mut self) {
+        debug!("** INTERRUPT_NMI **");
         self._push_u16(self.program_counter);
         let mut status = self.status;
         status = status & !FLAG_BREAK;
@@ -568,6 +556,7 @@ impl<'a> CPU<'a> {
 
     pub fn _push(&mut self, value: u8) {
         let addr = 0x0100 + self.stack_pointer as u16;
+        trace!("STACK PUSH: {:04X} => {:02X}", self.stack_pointer, value);
         self.mem_write(addr, value);
         self.stack_pointer = self.stack_pointer.wrapping_sub(1);
     }
@@ -575,20 +564,19 @@ impl<'a> CPU<'a> {
     pub fn _pop(&mut self) -> u8 {
         self.stack_pointer = self.stack_pointer.wrapping_add(1);
         let addr = 0x0100 + self.stack_pointer as u16;
+        trace!("STACK POP: {:02X}", self.stack_pointer);
         self.mem_read(addr)
     }
 
     pub fn _push_u16(&mut self, value: u16) {
-        let addr = 0x0100 + self.stack_pointer.wrapping_sub(1) as u16;
-        self.mem_write_u16(addr, value);
-        self.stack_pointer = self.stack_pointer.wrapping_sub(2);
+        self._push((value >> 8) as u8);
+        self._push((value & 0x00FF) as u8);
     }
 
     pub fn _pop_u16(&mut self) -> u16 {
-        let addr = 0x0100 + self.stack_pointer.wrapping_add(1) as u16;
-        let value = self.mem_read_u16(addr);
-        self.stack_pointer = self.stack_pointer.wrapping_add(2);
-        value
+        let lo = self._pop();
+        let hi = self._pop();
+        ((hi as u16) << 8) | lo as u16
     }
 
     pub fn jmp(&mut self, mode: &AddressingMode) {
@@ -700,9 +688,11 @@ impl<'a> CPU<'a> {
             if self.status & flag != 0 {
                 // (+1 if branch succeeds
                 //  +2 if to a new page)
+                //    => new pageの場合は、+1っぽい。
+                //     https://pgate1.at-ninja.jp/NES_on_FPGA/nes_cpu.htm#clock
                 self.add_cycles += 1;
-                if self.program_counter & 0xFF00 != addr & 0xFF00 {
-                    self.add_cycles += 2;
+                if (self.program_counter & 0xFF00) != (addr & 0xFF00) {
+                    self.add_cycles += 1;
                 }
                 self.program_counter = addr
             }
@@ -711,8 +701,8 @@ impl<'a> CPU<'a> {
                 // (+1 if branch succeeds
                 //  +2 if to a new page)
                 self.add_cycles += 1;
-                if self.program_counter & 0xFF00 != addr & 0xFF00 {
-                    self.add_cycles += 2;
+                if (self.program_counter & 0xFF00) != (addr & 0xFF00) {
+                    self.add_cycles += 1;
                 }
                 self.program_counter = addr
             }
@@ -720,6 +710,11 @@ impl<'a> CPU<'a> {
     }
 
     pub fn brk(&mut self, mode: &AddressingMode) {
+        // FLAG_INTERRRUPTが立っている場合は
+        if self.status & FLAG_INTERRRUPT != 0 {
+            return;
+        }
+
         // プログラム カウンターとプロセッサ ステータスがスタックにプッシュされ、
         self._push_u16(self.program_counter);
         self._push(self.status);
@@ -957,6 +952,7 @@ pub fn trace(cpu: &mut CPU) -> String {
     // OK LDX #$01 => asm code
     // "0400 @ 0400 = AA" => memory access
     // OK A:01 X:02 Y:03 P:24 SP:FD => register, status, stack_pointer
+    unsafe { IN_TRACE = true };
 
     let program_counter = cpu.program_counter - 1;
     let pc = format!("{:<04X}", program_counter);
@@ -972,13 +968,19 @@ pub fn trace(cpu: &mut CPU) -> String {
     let memacc = memory_access(cpu, &ops, &args);
     let status = cpu2str(cpu);
 
-    format!(
+    let log = format!(
         "{:<6}{:<9}{:<33}{}",
         pc,
         bin,
         vec![asm, memacc].join(" "),
         status
-    )
+    );
+
+    trace!("{}", log);
+
+    unsafe { IN_TRACE = false };
+
+    log
 }
 
 fn binary(op: u8, args: &Vec<u8>) -> String {

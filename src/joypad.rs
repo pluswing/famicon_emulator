@@ -1,5 +1,7 @@
 use bitflags::bitflags;
 
+use crate::cpu::IN_TRACE;
+
 bitflags! {
   #[derive(Debug, Clone, Copy, PartialEq)]
   pub struct JoypadButton: u8 {
@@ -43,7 +45,9 @@ impl Joypad {
 
         let response = (self.button_status.bits() & (1 << self.button_index)) >> self.button_index;
         if !self.strobe && self.button_index <= 7 {
-            self.button_index += 1;
+            if !unsafe { IN_TRACE } {
+                self.button_index += 1;
+            }
         }
         response
     }
