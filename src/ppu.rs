@@ -76,7 +76,7 @@ impl NesPPU {
         debug!("WRITE PPU: {:04X} => {:02X}", addr, value);
 
         match addr {
-            0..=0x1FFF => {
+            0x0000..=0x1FFF => {
                 // FIXME
                 debug!("write CHR_ROM {:04X} => {:02X}", addr, value);
                 if self.is_chr_ram {
