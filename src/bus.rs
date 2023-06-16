@@ -112,7 +112,10 @@ impl Mem for Bus<'_> {
                 // self.joypad2.read()
                 0
             }
-            PRG_ROM..=PRG_ROM_END => self.read_prg_rom(addr),
+            PRG_ROM..=PRG_ROM_END => {
+                // TODO MAPPER.read_prg_rom(addr)
+                self.read_prg_rom(addr)
+            }
             _ => {
                 warn!("Ignoreing mem access at {:X}", addr);
                 0
@@ -195,6 +198,7 @@ impl Mem for Bus<'_> {
                 }
             }
             PRG_ROM..=PRG_ROM_END => {
+                // TODO MAPPER.write(addr)
                 warn!("Attempt to write to Cartrige ROM space")
             }
             _ => {

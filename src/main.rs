@@ -7,12 +7,12 @@ mod cartridge;
 mod cpu;
 mod frame;
 mod joypad;
+mod mapper;
 mod opscodes;
 mod palette;
 mod ppu;
 mod render;
 mod rom;
-
 use crate::cpu::{trace, IN_TRACE};
 
 use self::bus::{Bus, Mem};
