@@ -858,8 +858,6 @@ impl AudioCallback for NoiseWave {
             if self.keyoff.next() {
                 volume = 0.0;
             }
-            info!("N ENV {:?}", self.envelope);
-            info!("N KOF {:?}", self.keyoff);
 
             *x = if self.value { 0.0 } else { 1.0 } * volume;
 

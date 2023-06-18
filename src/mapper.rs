@@ -91,8 +91,14 @@ pub struct Mapper1 {
     chr_bank1: u8,
     // $E000-$FFFF
     prg_bank: u8,
+    prg_upper: u8,
 }
 
+// DQ3: SNROM
+// DQ4: SUROM
+// SUROM は、CHR A16 を使用して、512KB PRG ROM の上位アドレス ライン (PRG A18) を制御します。
+// SNROM は、マッパーからの上位 CHR バンク選択ライン (CHR A16、バンク番号のビット 4) を PRG RAM の追加チップ イネーブルとして使用します。[1] PRG RAM を備えた他のすべてのボードは /CE をグランドに接続しているようです。
+//  https://www.nesdev.org/wiki/SxROM
 impl Mapper1 {
     pub fn new(prg_rom_size: usize) -> Self {
         Mapper1 {
@@ -105,6 +111,7 @@ impl Mapper1 {
             chr_bank0: 0,
             chr_bank1: 0,
             prg_bank: 0,
+            prg_upper: 0,
         }
     }
 
@@ -124,6 +131,10 @@ impl Mapper for Mapper1 {
         self.shift_register = self.shift_register >> 1;
         self.shift_register = (self.shift_register | ((data & 0x01) << 4)) & 0x1F;
         self.write_count += 1;
+        info!(
+            "MAPPER1: W:{:04X}, CNT:{} {:02X}",
+            addr, self.write_count, data
+        );
 
         if self.write_count == 5 {
             let v = self.shift_register;
@@ -149,17 +160,37 @@ impl Mapper for Mapper1 {
                     };
                     info!("MAPPER1: W:{:04X}, control: mirroring={:?}, prg_rom_bank_mode={:?}, chr_rom_bank_mode={:?}", addr, self.mirroring, self.prg_rom_bank_mode, self.chr_rom_bank_mode);
                 }
+                // 0xA000..=0xBFFF => {
+                //     self.chr_bank0 = v & 0x1F;
+                //     info!("MAPPER1: W:{:04X}, CHR_BANK0={:02X}", addr, v & 0x1F)
+                // }
+                // 0xC000..=0xDFFF => {
+                //     self.chr_bank1 = v & 0x1F;
+                //     info!("MAPPER1: W:{:04X}, CHR_BANK1={:02X}", addr, v & 0x1F)
+                // }
                 0xA000..=0xBFFF => {
-                    self.chr_bank0 = v & 0x1F;
-                    info!("MAPPER1: W:{:04X}, CHR_BANK0={:02X}", addr, v & 0x1F)
+                    // 4bit0
+                    // -----
+                    // PSSxC
+                    // ||| |
+                    // ||| +- PPU $0000 で 4 KB CHR RAM バンクを選択 (8 KB モードでは無視されます)
+                    // |++--- 8 KB PRG RAM バンクを選択
+                    // +----- 256 KB PRG ROM バンクを選択
+                    self.prg_upper = v & 0x10;
                 }
                 0xC000..=0xDFFF => {
-                    self.chr_bank1 = v & 0x1F;
-                    info!("MAPPER1: W:{:04X}, CHR_BANK1={:02X}", addr, v & 0x1F)
+                    // 4bit0
+                    // -----
+                    // PSSxC
+                    // ||| |
+                    // ||| +- PPU $1000 で 4 KB CHR RAM バンクを選択 (8 KB モードでは無視)
+                    // |++--- 8 KB PRG RAM バンクを選択 (8 KB モードでは無視)
+                    // +----- 256 KB PRG ROM バンクを選択 ( 8 KB モードでは無視されます)
+                    self.prg_upper = v & 0x10;
                 }
                 0xE000..=0xFFFF => {
                     self.prg_bank = v & 0x1F;
-                    info!("MAPPER1: W:{:04X}, PRG_BANK={:02X}", addr, v & 0x0E)
+                    info!("MAPPER1: W:{:04X}, PRG_BANK={:02X}", addr, v & 0x1F)
                 }
                 _ => panic!("can't be"),
             };
@@ -168,10 +199,17 @@ impl Mapper for Mapper1 {
     }
 
     fn mirror_prg_rom_addr(&self, addr: usize) -> usize {
-        let num = self.prg_bank as usize & 0x0F;
+        let mut num = self.prg_bank as usize & 0x0F;
 
         let bank_len = 16 * 1024;
-        let last_bank = self.prg_rom_size / bank_len - 1;
+        let mut last_bank = self.prg_rom_size / bank_len - 1;
+        let upper = self.prg_upper == 0x10;
+        if !upper {
+            last_bank = last_bank & 0x0F;
+        }
+        if upper {
+            num = num | 0x10;
+        }
 
         match self.prg_rom_bank_mode {
             PrgRomBankMode::IgnoreLowerBit => (num & 0x0E) * bank_len,
