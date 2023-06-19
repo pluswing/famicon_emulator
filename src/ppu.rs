@@ -1,12 +1,13 @@
 use bitflags::bitflags;
 use log::{debug, info, trace};
 
-use crate::{cpu::IN_TRACE, rom::Mirroring};
+use crate::{
+    cpu::IN_TRACE,
+    rom::{Mirroring, Rom},
+};
 
-pub struct NesPPU {
-    pub chr_rom: Vec<u8>,
-    pub mirroring: Mirroring,
-    pub is_chr_ram: bool,
+pub struct NesPPU<'rom> {
+    pub rom: &'rom mut Rom,
 
     pub palette_table: [u8; 32],
     pub vram: [u8; 2048],
@@ -39,12 +40,10 @@ pub struct NesPPU {
     pub scanline_palette_tables: Vec<[u8; 32]>,
 }
 
-impl NesPPU {
-    pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring, is_chr_ram: bool) -> Self {
+impl<'a> NesPPU<'a> {
+    pub fn new(rom: &'a mut Rom) -> Self {
         NesPPU {
-            chr_rom: chr_rom,
-            mirroring: mirroring,
-            is_chr_ram: is_chr_ram,
+            rom,
             vram: [0; 2048],
             oam_data: [0; 64 * 4],
             oam_addr: 0,
@@ -79,8 +78,9 @@ impl NesPPU {
             0x0000..=0x1FFF => {
                 // FIXME
                 debug!("write CHR_ROM {:04X} => {:02X}", addr, value);
-                if self.is_chr_ram {
-                    self.chr_rom[addr as usize] = value;
+                if self.rom.is_chr_ram {
+                    // TODO CHR_RAMの場合、ROMのデータを書き換えないといけないので、mut必要。
+                    // self.rom.chr_rom[addr as usize] = value;
                 }
             }
             0x2000..=0x2FFF => {
@@ -247,7 +247,7 @@ impl NesPPU {
                     self.internal_data_buf
                 } else {
                     let result = self.internal_data_buf;
-                    self.internal_data_buf = self.chr_rom[addr as usize];
+                    self.internal_data_buf = self.rom.chr_rom[addr as usize];
                     result
                 }
             }
@@ -286,7 +286,7 @@ impl NesPPU {
         let mirrored_vram = addr & 0b10_1111_1111_1111;
         let vram_index = mirrored_vram - 0x2000;
         let name_table = vram_index / 0x400;
-        match (&self.mirroring, name_table) {
+        match (&self.rom.screen_mirroring, name_table) {
             (Mirroring::VERTICAL, 2) => vram_index - 0x800,
             (Mirroring::VERTICAL, 3) => vram_index - 0x800,
             (Mirroring::HORIZONTAL, 2) => vram_index - 0x400,

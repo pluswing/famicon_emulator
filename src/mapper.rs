@@ -4,7 +4,7 @@ pub struct Mapper2 {
 }
 
 impl Mapper2 {
-    fn new(prg_rom: Vec<u8>) -> Self {
+    pub fn new(prg_rom: Vec<u8>) -> Self {
         Mapper2 {
             prg_rom,
             bank_select: 0,
