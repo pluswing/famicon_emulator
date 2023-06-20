@@ -1,12 +1,12 @@
-use crate::apu::NesAPU;
 use crate::joypad::Joypad;
 use crate::ppu::NesPPU;
 use crate::rom::Rom;
+use crate::{apu::NesAPU, MAPPER};
 use log::{debug, error, info, log_enabled, trace, warn, Level};
 
 pub struct Bus<'call> {
     cpu_vram: [u8; 2048],
-    prg_rom: Vec<u8>,
+    // prg_rom: Vec<u8>,
     ppu: NesPPU,
     joypad1: Joypad,
     joypad2: Joypad,
@@ -24,7 +24,7 @@ impl<'a> Bus<'a> {
         let ppu = NesPPU::new(rom.chr_rom, rom.screen_mirroring, rom.is_chr_ram);
         Bus {
             cpu_vram: [0; 2048],
-            prg_rom: rom.prg_rom,
+            // prg_rom: rom.prg_rom,
             ppu: ppu,
             joypad1: Joypad::new(),
             joypad2: Joypad::new(),
@@ -34,14 +34,14 @@ impl<'a> Bus<'a> {
         }
     }
 
-    fn read_prg_rom(&self, mut addr: u16) -> u8 {
-        addr -= 0x8000;
-        if self.prg_rom.len() == 0x4000 && addr >= 0x4000 {
-            // mirror if needed
-            addr = addr % 0x4000;
-        }
-        self.prg_rom[addr as usize]
-    }
+    // fn read_prg_rom(&self, mut addr: u16) -> u8 {
+    //     addr -= 0x8000;
+    //     if self.prg_rom.len() == 0x4000 && addr >= 0x4000 {
+    //         // mirror if needed
+    //         addr = addr % 0x4000;
+    //     }
+    //     self.prg_rom[addr as usize]
+    // }
 
     pub fn tick(&mut self, cycles: u8) {
         self.cycles += cycles as usize;
@@ -113,8 +113,8 @@ impl Mem for Bus<'_> {
                 0
             }
             PRG_ROM..=PRG_ROM_END => {
-                // TODO MAPPER.read_prg_rom(addr)
-                self.read_prg_rom(addr)
+                MAPPER.lock().unwrap().read_prg_rom(addr)
+                // self.read_prg_rom(addr)
             }
             _ => {
                 warn!("Ignoreing mem access at {:X}", addr);
@@ -198,8 +198,11 @@ impl Mem for Bus<'_> {
                 }
             }
             PRG_ROM..=PRG_ROM_END => {
-                // TODO MAPPER.write(addr)
-                warn!("Attempt to write to Cartrige ROM space")
+                MAPPER.lock().unwrap().write(addr, data);
+                // warn!(
+                //     "Attempt to write to Cartrige ROM space {:04X} => {:02X}",
+                //     addr, data
+                // )
             }
             _ => {
                 error!("Ignoreing mem write-access at {:X}", addr)

@@ -9,7 +9,6 @@ pub enum Mirroring {
 const NES_TAG: [u8; 4] = [0x4E, 0x45, 0x53, 0x1A]; // NES^Z
 const PRG_ROM_PAGE_SIZE: usize = 16 * 1024; // 16KiB
 const CHR_ROM_PAGE_SIZE: usize = 8 * 1024; // 8KiB
-
 pub struct Rom {
     pub prg_rom: Vec<u8>,
     pub chr_rom: Vec<u8>,

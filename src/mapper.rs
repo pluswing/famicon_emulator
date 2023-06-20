@@ -1,12 +1,12 @@
 pub struct Mapper2 {
-    prg_rom: Vec<u8>,
+    pub prg_rom: Vec<u8>,
     bank_select: u8,
 }
 
 impl Mapper2 {
-    fn new(prg_rom: Vec<u8>) -> Self {
+    pub fn new() -> Self {
         Mapper2 {
-            prg_rom,
+            prg_rom: vec![],
             bank_select: 0,
         }
     }
