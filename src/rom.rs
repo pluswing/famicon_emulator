@@ -1,5 +1,3 @@
-use crate::mapper::Mapper2;
-
 #[derive(Debug, PartialEq)]
 #[allow(non_camel_case_types)]
 pub enum Mirroring {
@@ -13,8 +11,9 @@ const PRG_ROM_PAGE_SIZE: usize = 16 * 1024; // 16KiB
 const CHR_ROM_PAGE_SIZE: usize = 8 * 1024; // 8KiB
 
 pub struct Rom {
+    pub prg_rom: Vec<u8>,
     pub chr_rom: Vec<u8>,
-    pub mapper: Mapper2,
+    pub mapper: u8,
     pub screen_mirroring: Mirroring,
     pub is_chr_ram: bool,
 }
@@ -56,14 +55,22 @@ impl Rom {
             raw[chr_rom_start..(chr_rom_start + chr_rom_size)].to_vec()
         };
 
-        let prg_rom = raw[prg_rom_start..(prg_rom_start + prg_rom_size)].to_vec();
-
         Ok(Rom {
+            prg_rom: raw[prg_rom_start..(prg_rom_start + prg_rom_size)].to_vec(),
             chr_rom: chr_rom,
-            // TODO mapper番号を見てインスタンスを作る
-            mapper: Mapper2::new(prg_rom),
+            mapper: mapper,
             screen_mirroring: screen_mirroring,
             is_chr_ram: chr_rom_size == 0,
         })
+    }
+
+    pub fn empty() -> Self {
+        return Rom {
+            prg_rom: vec![],
+            chr_rom: vec![],
+            mapper: 0,
+            screen_mirroring: Mirroring::VERTICAL,
+            is_chr_ram: false,
+        };
     }
 }

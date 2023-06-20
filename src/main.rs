@@ -76,16 +76,15 @@ fn main() {
     let rom = load_rom("rom/BombSweeper.nes");
     let rom = alter_ego_rom();
     // let rom = mario_rom();
-    let mut rom = load_rom("rom/Dragon Quest II - Akuryou no Kamigami (Japan).nes");
 
-    // info!(
-    //     "ROM: mapper={}, mirroring={:?} chr_ram={}",
-    //     rom.mapper, rom.screen_mirroring, rom.is_chr_ram
-    // );
+    info!(
+        "ROM: mapper={}, mirroring={:?} chr_ram={}",
+        rom.mapper, rom.screen_mirroring, rom.is_chr_ram
+    );
 
     let mut frame = Frame::new();
     let apu = NesAPU::new(&sdl_context);
-    let bus = Bus::new(&mut rom, apu, move |ppu: &NesPPU, joypad1: &mut Joypad| {
+    let bus = Bus::new(rom, apu, move |ppu: &NesPPU, joypad1: &mut Joypad| {
         render::render(ppu, &mut frame);
         texture.update(None, &frame.data, 256 * 3).unwrap();
 

@@ -28,27 +28,23 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
     let scroll_x = (ppu.scroll.scroll_x) as usize;
     let scroll_y = (ppu.scroll.scroll_y) as usize;
 
-    let (main_name_table, second_name_table) =
-        match (&ppu.rom.screen_mirroring, ppu.ctrl.nametable_addr()) {
-            (Mirroring::VERTICAL, 0x2000) | (Mirroring::VERTICAL, 0x2800) => {
-                (&ppu.vram[0x000..0x400], &ppu.vram[0x400..0x800])
-            }
-            (Mirroring::VERTICAL, 0x2400) | (Mirroring::VERTICAL, 0x2C00) => {
-                (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
-            }
-            (Mirroring::HORIZONTAL, 0x2000) | (Mirroring::HORIZONTAL, 0x2400) => {
-                (&ppu.vram[0x000..0x400], &ppu.vram[0x400..0x800])
-            }
-            (Mirroring::HORIZONTAL, 0x2800) | (Mirroring::HORIZONTAL, 0x2C00) => {
-                (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
-            }
-            (_, _) => {
-                panic!(
-                    "Not supported mirroring type {:?}",
-                    ppu.rom.screen_mirroring
-                );
-            }
-        };
+    let (main_name_table, second_name_table) = match (&ppu.mirroring, ppu.ctrl.nametable_addr()) {
+        (Mirroring::VERTICAL, 0x2000) | (Mirroring::VERTICAL, 0x2800) => {
+            (&ppu.vram[0x000..0x400], &ppu.vram[0x400..0x800])
+        }
+        (Mirroring::VERTICAL, 0x2400) | (Mirroring::VERTICAL, 0x2C00) => {
+            (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
+        }
+        (Mirroring::HORIZONTAL, 0x2000) | (Mirroring::HORIZONTAL, 0x2400) => {
+            (&ppu.vram[0x000..0x400], &ppu.vram[0x400..0x800])
+        }
+        (Mirroring::HORIZONTAL, 0x2800) | (Mirroring::HORIZONTAL, 0x2C00) => {
+            (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
+        }
+        (_, _) => {
+            panic!("Not supported mirroring type {:?}", ppu.mirroring);
+        }
+    };
 
     let screen_w = 256;
     let screen_h = 240;
@@ -108,8 +104,8 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
 
         let bank: u16 = ppu.ctrl.sprite_pattern_addr();
 
-        let tile = &ppu.rom.chr_rom
-            [(bank + tile_idx * 16) as usize..=(bank + tile_idx * 16 + 15) as usize];
+        let tile =
+            &ppu.chr_rom[(bank + tile_idx * 16) as usize..=(bank + tile_idx * 16 + 15) as usize];
 
         for y in 0..=7 {
             let mut upper = tile[y];
@@ -185,8 +181,8 @@ fn render_name_table(
         let tile_column = i % 32;
         let tile_row = i / 32;
         let tile_idx = name_table[i] as u16;
-        let tile = &ppu.rom.chr_rom
-            [(bank + tile_idx * 16) as usize..=(bank + tile_idx * 16 + 15) as usize];
+        let tile =
+            &ppu.chr_rom[(bank + tile_idx * 16) as usize..=(bank + tile_idx * 16 + 15) as usize];
         let palette = bg_pallette(ppu, attribute_table, tile_column, tile_row);
 
         for y in 0..=7 {
