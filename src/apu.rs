@@ -3,6 +3,10 @@ pub struct NesAPU {
     ch2_register: Ch2Register,
     ch3_register: Ch3Register,
     ch4_register: Ch4Register,
+    frame_counter: FrameCounter,
+    cycles: usize,
+    counter: usize,
+    irq: bool,
 
     ch1_device: AudioDevice<SquareWave>,
     ch1_sender: Sender<SquareNote>,
@@ -31,6 +35,10 @@ impl NesAPU {
             ch2_register: Ch2Register::new(),
             ch3_register: Ch3Register::new(),
             ch4_register: Ch4Register::new(),
+            frame_counter: FrameCounter::new(),
+            cycles: 0,
+            counter: 0,
+            irq: false,
 
             ch1_device: ch1_device,
             ch1_sender: ch1_sender,
@@ -123,6 +131,35 @@ impl NesAPU {
                 volume: volume,
             })
             .unwrap();
+    }
+
+    pub fn write_frame_counter(&mut self, value: u8) {
+        self.frame_counter.update(value);
+    }
+
+    pub fn tick(&mut self, cycles: usize) {
+        self.cycles += cycles;
+
+        let interval = 7457;
+        if self.cycles >= interval {
+            self.cycles -= interval;
+            self.counter += 1;
+
+            match self.frame_counter.mode() {
+                4 => {
+                    if self.counter == 2 || self.counter == 4 {
+                        // 長さカウンタとスイープユニットのクロック生成
+                    }
+                    if self.counter == 4 {
+                        // 割り込みフラグセット
+                        self.counter = 0;
+                        self.irq = true;
+                    }
+                    // エンベロープと三角波の線形カウンタのクロック生成
+                }
+                5 => {}
+            }
+        }
     }
 }
 
@@ -329,6 +366,7 @@ impl Ch4Register {
     }
 }
 
+use bitflags::bitflags;
 use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
@@ -561,4 +599,33 @@ fn init_noise(sdl_context: &sdl2::Sdl) -> (AudioDevice<NoiseWave>, Sender<NoiseN
     device.resume();
 
     (device, sender)
+}
+
+bitflags! {
+  pub struct FrameCounter: u8 {
+    const DISABLE_IRQ    = 0b0100_0000;
+    const SEQUENCER_MODE = 0b1000_0000;
+  }
+}
+
+impl FrameCounter {
+    pub fn new() -> Self {
+        FrameCounter::from_bits_truncate(0b1100_0000)
+    }
+
+    pub fn mode(&self) -> u8 {
+        if self.contains(FrameCounter::SEQUENCER_MODE) {
+            5
+        } else {
+            4
+        }
+    }
+
+    pub fn irq(&self) -> bool {
+        !self.contains(FrameCounter::DISABLE_IRQ)
+    }
+
+    pub fn update(&mut self, data: u8) {
+        *self.0.bits_mut() = data;
+    }
 }

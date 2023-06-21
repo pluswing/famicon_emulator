@@ -257,6 +257,11 @@ impl<'a> CPU<'a> {
             if let Some(_nmi) = self.bus.poll_nmi_status() {
                 self.interrupt_nmi();
             }
+
+            if self.bus.poll_apu_irq() {
+                self.api_irq();
+            }
+
             let opscode = self.mem_read(self.program_counter);
             self.program_counter += 1;
 

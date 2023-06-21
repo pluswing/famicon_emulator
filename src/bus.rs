@@ -50,6 +50,8 @@ impl<'a> Bus<'a> {
         self.ppu.tick(cycles * 3);
         let nmi_after = self.ppu.nmi_interrupt.is_some();
 
+        self.apu.tick(cycles);
+
         if !nmi_before && nmi_after {
             (self.gameloop_callback)(&self.ppu, &mut self.joypad1);
         }
@@ -180,9 +182,7 @@ impl Mem for Bus<'_> {
                 // 書き込みは、joypadではなく、APUになる。
                 //   APUフレームカウンター
                 //   https://www.nesdev.org/wiki/APU_Frame_Counter
-                if (data & 0xC0) == 0 {
-                    //
-                }
+                self.apu.write_frame_counter(data);
                 info!("WRITE ACCESS 0x4017. {:02X}", data);
             }
             0x4014 => {
