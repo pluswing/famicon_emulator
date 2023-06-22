@@ -259,7 +259,7 @@ impl<'a> CPU<'a> {
             }
 
             if self.bus.poll_apu_irq() {
-                self.api_irq();
+                self.apu_irq();
             }
 
             let opscode = self.mem_read(self.program_counter);
@@ -310,6 +310,20 @@ impl<'a> CPU<'a> {
         self.status = self.status | FLAG_INTERRRUPT;
         self.bus.tick(2);
         self.program_counter = self.mem_read_u16(0xFFFA);
+    }
+
+    fn apu_irq(&mut self) {
+        info!("** APU_IRQ **");
+
+        if self.status & FLAG_INTERRRUPT != 0 {
+            return;
+        }
+        info!("  => CALL");
+
+        self._push_u16(self.program_counter);
+        self._push(self.status);
+        self.program_counter = self.mem_read_u16(0xFFFE);
+        self.status = self.status | FLAG_BREAK;
     }
 
     fn find_ops(&mut self, opscode: u8) -> Option<OpCode> {

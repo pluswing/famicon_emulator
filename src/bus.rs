@@ -67,6 +67,10 @@ impl<'a> Bus<'a> {
         self.ppu.nmi_interrupt = None;
         res
     }
+
+    pub fn poll_apu_irq(&mut self) -> bool {
+        self.apu.irq
+    }
 }
 
 const RAM: u16 = 0x0000;
@@ -108,6 +112,7 @@ impl Mem for Bus<'_> {
                 debug!("READ PPU MIRROR: {:04X} => {:04X}", addr, mirror_down_addr);
                 self.mem_read(mirror_down_addr)
             }
+            0x4015 => self.apu.read_status(),
             0x4016 => self.joypad1.read(),
             0x4017 => {
                 // readはjoypad2になるらしいが、writeはAPUらしい。。

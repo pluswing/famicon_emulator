@@ -1,3 +1,5 @@
+use log::{debug, info, trace};
+
 pub struct NesAPU {
     ch1_register: Ch1Register,
     ch2_register: Ch2Register,
@@ -6,7 +8,7 @@ pub struct NesAPU {
     frame_counter: FrameCounter,
     cycles: usize,
     counter: usize,
-    irq: bool,
+    pub irq: bool,
 
     ch1_device: AudioDevice<SquareWave>,
     ch1_sender: Sender<SquareNote>,
@@ -133,12 +135,20 @@ impl NesAPU {
             .unwrap();
     }
 
-    pub fn write_frame_counter(&mut self, value: u8) {
-        self.frame_counter.update(value);
+    pub fn read_status(&mut self) -> u8 {
+        self.irq = false;
+        // TODO return status
+        0
     }
 
-    pub fn tick(&mut self, cycles: usize) {
-        self.cycles += cycles;
+    pub fn write_frame_counter(&mut self, value: u8) {
+        self.frame_counter.update(value);
+        self.cycles = 0;
+        self.counter = 0;
+    }
+
+    pub fn tick(&mut self, cycles: u8) {
+        self.cycles += cycles as usize;
 
         let interval = 7457;
         if self.cycles >= interval {
@@ -158,6 +168,7 @@ impl NesAPU {
                     // エンベロープと三角波の線形カウンタのクロック生成
                 }
                 5 => {}
+                _ => panic!("can't be"),
             }
         }
     }
