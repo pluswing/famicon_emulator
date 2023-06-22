@@ -82,7 +82,9 @@ pub struct CPU<'a> {
     // pub memory: [u8; 0x10000], // 0xFFFF
     pub bus: Bus<'a>,
 
+    pub cycles: usize,
     add_cycles: u8,
+    current_op: Option<OpCode>,
 }
 
 pub static mut IN_TRACE: bool = false;
@@ -368,7 +370,7 @@ impl<'a> CPU<'a> {
         self.register_x = v;
         self.update_zero_and_negative_flags(self.register_x);
         self.status = if overflow {
-            self.status & FLAG_OVERFLOW
+            self.status & !FLAG_OVERFLOW
         } else {
             self.status | FLAG_OVERFLOW
         };
@@ -542,6 +544,13 @@ impl<'a> CPU<'a> {
 
     pub fn nop(&mut self, mode: &AddressingMode) {
         // なにもしない
+        match mode {
+            AddressingMode::Implied => {}
+            AddressingMode::Accumulator => {}
+            _ => {
+                self.get_operand_address(mode);
+            }
+        };
     }
 
     pub fn ldy(&mut self, mode: &AddressingMode) {
@@ -981,7 +990,11 @@ pub fn trace(cpu: &mut CPU) -> String {
     unsafe { IN_TRACE = true };
 
     let program_counter = cpu.program_counter - 1;
-    let pc = format!("{:<04X}", program_counter);
+    let bank: Option<u8> = None; // MAPPER.lock().unwrap().prg_bank(program_counter);
+    let pc = match bank {
+        Some(b) => format!("{:02X}:{:<04X}", b, program_counter),
+        None => format!("{:<04X}", program_counter),
+    };
     let op = cpu.mem_read(program_counter);
     let ops = cpu.find_ops(op).unwrap();
     let mut args: Vec<u8> = vec![];
