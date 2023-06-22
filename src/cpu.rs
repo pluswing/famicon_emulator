@@ -109,6 +109,7 @@ impl<'a> CPU<'a> {
             // memory: [0x00; 0x10000],
             bus: bus,
             add_cycles: 0,
+            current_op: None,
         }
     }
 
@@ -148,7 +149,7 @@ impl<'a> CPU<'a> {
                 let base = self.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_x as u16);
                 // (+1 if page crossed)
-                if base & 0xFF00 != addr & 0xFF00 {
+                if (base & 0xFF00) != (addr & 0xFF00) {
                     self.add_cycles += 1;
                 }
                 addr
@@ -159,7 +160,7 @@ impl<'a> CPU<'a> {
                 let base = self.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_y as u16);
                 // (+1 if page crossed)
-                if base & 0xFF00 != addr & 0xFF00 {
+                if (base & 0xFF00) != (addr & 0xFF00) {
                     self.add_cycles += 1;
                 }
                 addr
@@ -167,16 +168,7 @@ impl<'a> CPU<'a> {
             // JMP -> same Absolute
             AddressingMode::Indirect => {
                 let base = self.mem_read_u16(self.program_counter);
-
-                // let addr = self.mem_read_u16(base);
-                if (base & 0xFF) == 0xFF {
-                    debug!("[JMP Indirect] page boundary. {:04X}", base);
-                    let lo = self.mem_read(base) as u16;
-                    let hi = self.mem_read(base & 0xFF00) as u16;
-                    (hi << 8) | (lo as u16)
-                } else {
-                    self.mem_read_u16(base)
-                }
+                self.mem_read_u16(base)
             }
 
             // LDA ($44,X) => a1 44
@@ -213,6 +205,11 @@ impl<'a> CPU<'a> {
     }
 
     pub fn mem_read_u16(&mut self, pos: u16) -> u16 {
+        if (pos & 0xFF) == 0xFF && pos & 0xFF00 < 0x6000 {
+            let lo = self.mem_read(pos) as u16;
+            let hi = self.mem_read(pos & 0xFF00) as u16;
+            return (hi << 8) | (lo as u16);
+        }
         let lo = self.mem_read(pos) as u16;
         let hi = self.mem_read(pos + 1) as u16;
         (hi << 8) | (lo as u16)
@@ -240,6 +237,7 @@ impl<'a> CPU<'a> {
         self.stack_pointer = 0xFD;
 
         self.program_counter = self.mem_read_u16(0xFFFC);
+        // self.program_counter = 0xC000;
     }
 
     pub fn load(&mut self) {
@@ -268,6 +266,7 @@ impl<'a> CPU<'a> {
             let op = self.find_ops(opscode);
             match op {
                 Some(op) => {
+                    self.current_op = Some(op.clone());
                     self.add_cycles = 0;
 
                     callback(self);
@@ -280,19 +279,22 @@ impl<'a> CPU<'a> {
                         CycleCalcMode::Page => {
                             if self.add_cycles > 1 {
                                 panic!(
-                                    "Unexpected cycle_calc. {} {:?} => {}",
+                                    "Unexpected cycle_calc. (Page) {} {:?} => {}",
                                     op.name, op.addressing_mode, self.add_cycles
                                 )
                             }
                         }
-                        _ => {}
+                        CycleCalcMode::Branch => {
+                            if self.add_cycles > 3 {
+                                panic!(
+                                    "Unexpected cycle_calc. (Branch) {} {:?} => {}",
+                                    op.name, op.addressing_mode, self.add_cycles
+                                )
+                            }
+                        }
                     }
-
+                    self.cycles += (op.cycles + self.add_cycles) as usize;
                     apu_irq = self.bus.tick(op.cycles + self.add_cycles);
-
-                    // if program_conter_state == self.program_counter {
-                    //   self.program_counter += (op.len - 1) as u16
-                    // }
                 }
                 _ => panic!("no implementation {:<02X}", opscode),
             }
@@ -706,6 +708,8 @@ impl<'a> CPU<'a> {
 
     fn _branch(&mut self, mode: &AddressingMode, flag: u8, nonzero: bool) {
         let addr = self.get_operand_address(mode);
+        let pc = self.program_counter + self.current_op.as_ref().unwrap().bytes - 1;
+
         if nonzero {
             if self.status & flag != 0 {
                 // (+1 if branch succeeds
@@ -713,7 +717,7 @@ impl<'a> CPU<'a> {
                 //    => new pageの場合は、+1っぽい。
                 //     https://pgate1.at-ninja.jp/NES_on_FPGA/nes_cpu.htm#clock
                 self.add_cycles += 1;
-                if (self.program_counter & 0xFF00) != (addr & 0xFF00) {
+                if (pc & 0xFF00) != ((addr + 1) & 0xFF00) {
                     self.add_cycles += 1;
                 }
                 self.program_counter = addr
@@ -723,7 +727,7 @@ impl<'a> CPU<'a> {
                 // (+1 if branch succeeds
                 //  +2 if to a new page)
                 self.add_cycles += 1;
-                if (self.program_counter & 0xFF00) != (addr & 0xFF00) {
+                if (pc & 0xFF00) != ((addr + 1) & 0xFF00) {
                     self.add_cycles += 1;
                 }
                 self.program_counter = addr

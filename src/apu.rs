@@ -630,6 +630,7 @@ impl Sweep {
         }
         if self.count < self.counter {
             self.value *= 2.0;
+            self.counter = 0;
         }
         if !self.sequencer.next() {
             return self.value;

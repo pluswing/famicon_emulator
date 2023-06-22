@@ -28,8 +28,8 @@ pub struct NesPPU {
     // Scroll 0x2005
     pub scroll: ScrollRegister,
 
-    cycles: usize,
-    scanline: usize,
+    pub cycles: usize,
+    pub scanline: usize,
     pub nmi_interrupt: Option<i32>,
     pub clear_nmi_interrupt: bool,
 
@@ -485,7 +485,7 @@ bitflags! {
 
 impl StatusRegister {
     pub fn new() -> Self {
-        StatusRegister::from_bits_truncate(0b0001_0000)
+        StatusRegister::from_bits_truncate(0b0000_0000)
     }
 
     pub fn is_in_vblank(&mut self) -> bool {
