@@ -6,9 +6,9 @@ pub struct NesAPU {
     ch3_register: Ch3Register,
     ch4_register: Ch4Register,
     frame_counter: FrameCounter,
+    status: StatusRegister,
     cycles: usize,
     counter: usize,
-    pub irq: bool,
 
     ch1_device: AudioDevice<SquareWave>,
     ch1_sender: Sender<SquareNote>,
@@ -38,9 +38,9 @@ impl NesAPU {
             ch3_register: Ch3Register::new(),
             ch4_register: Ch4Register::new(),
             frame_counter: FrameCounter::new(),
+            status: StatusRegister::new(),
             cycles: 0,
             counter: 0,
-            irq: false,
 
             ch1_device: ch1_device,
             ch1_sender: ch1_sender,
@@ -136,9 +136,17 @@ impl NesAPU {
     }
 
     pub fn read_status(&mut self) -> u8 {
-        self.irq = false;
-        // TODO return status
-        0
+        let res = self.status.bits();
+        self.status.remove(StatusRegister::ENABLE_FRAME_IRQ);
+        res
+    }
+
+    pub fn write_status(&mut self, data: u8) {
+        self.status.update(data)
+    }
+
+    pub fn irq(&self) -> bool {
+        self.status.contains(StatusRegister::ENABLE_FRAME_IRQ)
     }
 
     pub fn write_frame_counter(&mut self, value: u8) {
@@ -163,7 +171,7 @@ impl NesAPU {
                     if self.counter == 4 {
                         // 割り込みフラグセット
                         self.counter = 0;
-                        self.irq = true;
+                        self.status.insert(StatusRegister::ENABLE_FRAME_IRQ);
                     }
                     // エンベロープと三角波の線形カウンタのクロック生成
                 }
@@ -634,6 +642,29 @@ impl FrameCounter {
 
     pub fn irq(&self) -> bool {
         !self.contains(FrameCounter::DISABLE_IRQ)
+    }
+
+    pub fn update(&mut self, data: u8) {
+        *self.0.bits_mut() = data;
+    }
+}
+
+bitflags! {
+  pub struct StatusRegister: u8 {
+    const ENABLE_1CH       = 0b0000_0001;
+    const ENABLE_2CH       = 0b0000_0010;
+    const ENABLE_3CH       = 0b0000_0100;
+    const ENABLE_4CH       = 0b0000_1000;
+    const ENABLE_5CH       = 0b0001_0000;
+
+    const ENABLE_FRAME_IRQ = 0b0100_0000;
+    const ENABLE_DMC_IRQ   = 0b1000_0000;
+  }
+}
+
+impl StatusRegister {
+    pub fn new() -> Self {
+        StatusRegister::from_bits_truncate(0b0000_0000)
     }
 
     pub fn update(&mut self, data: u8) {

@@ -69,7 +69,7 @@ impl<'a> Bus<'a> {
     }
 
     pub fn poll_apu_irq(&mut self) -> bool {
-        self.apu.irq
+        self.apu.irq()
     }
 }
 
@@ -174,8 +174,11 @@ impl Mem for Bus<'_> {
             0x4004..=0x4007 => self.apu.write2ch(addr, data),
             0x4008 | 0x400A | 0x400B => self.apu.write3ch(addr, data),
             0x400C | 0x400E | 0x400F => self.apu.write4ch(addr, data),
-            0x4010..=0x4013 | 0x4015 => {
+            0x4010..=0x4013 => {
                 // TODO DMCch
+            }
+            0x4015 => {
+                self.apu.write_status(data);
             }
             0x4016 => {
                 self.joypad1.write(data);
