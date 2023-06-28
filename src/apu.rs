@@ -148,8 +148,18 @@ impl NesAPU {
     pub fn write_status(&mut self, data: u8) {
         self.status.update(data);
 
+        // TODO Startイベントを作る
         if !self.status.contains(StatusRegister::ENABLE_1CH) {
             self.ch1_sender.send(SquareEvent::Stop()).unwrap()
+        }
+        if !self.status.contains(StatusRegister::ENABLE_2CH) {
+            self.ch2_sender.send(SquareEvent::Stop()).unwrap()
+        }
+        if !self.status.contains(StatusRegister::ENABLE_3CH) {
+            self.ch3_sender.send(TriangleEvent::Stop()).unwrap()
+        }
+        if !self.status.contains(StatusRegister::ENABLE_4CH) {
+            self.ch4_sender.send(NoiseEvent::Stop()).unwrap()
         }
     }
 
@@ -399,9 +409,59 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq)]
+struct Envelope {
+    rate: u8,
+    enabled: bool,
+    loop_flag: bool,
+
+    counter: u8,
+    division_period: u8,
+}
+
+impl Envelope {
+    fn new(rate: u8, enabled: bool, loop_flag: bool) -> Self {
+        Envelope {
+            rate,
+            enabled,
+            loop_flag,
+            counter: 0x0F,
+            division_period: rate + 1,
+        }
+    }
+
+    fn tick(&mut self) {
+        self.division_period -= 1;
+
+        if self.division_period != 0 {
+            return;
+        }
+
+        // 分周器が励起 => division_period==0
+        if self.counter != 0 {
+            self.counter -= 1;
+        } else if self.counter == 0 {
+            if self.loop_flag {
+                self.counter = 0x0F;
+            }
+        }
+        self.division_period = self.rate + 1
+    }
+
+    fn volume(&self) -> f32 {
+        (if self.enabled {
+            self.counter
+        } else {
+            self.rate
+        }) as f32
+            / 15.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 enum SquareEvent {
     Note(SquareNote),
     Stop(),
+    Envelope(Envelope),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -426,6 +486,9 @@ impl AudioCallback for SquareWave {
             let res = self.receiver.recv_timeout(Duration::from_millis(0));
             match res {
                 Ok(SquareEvent::Note(note)) => self.note = note,
+                Ok(SquareEvent::Envelope(e)) => {
+                    // TODO
+                }
                 Ok(SquareEvent::Stop()) => self.note.volume = 0.0,
                 Err(_) => {}
             }
