@@ -61,29 +61,29 @@ impl NesAPU {
     pub fn write1ch(&mut self, addr: u16, value: u8) {
         self.ch1_register.write(addr, value);
 
-        let duty = match self.ch1_register.duty() {
+        let duty = match self.ch2_register.duty {
             0x00 => 0.125,
             0x01 => 0.25,
             0x02 => 0.50,
             0x03 => 0.75,
-            _ => panic!(
-                "can't be {} {:02X}",
-                self.ch1_register.duty(),
-                self.ch1_register.tone_volume,
-            ),
+            _ => panic!("can't be",),
         };
 
-        let volume = (self.ch1_register.volume() as f32) / 15.0;
+        let hz = NES_CPU_CLOCK / (16.0 * (self.ch2_register.frequency as f32 + 1.0));
 
-        let hz = NES_CPU_CLOCK / (16.0 * (self.ch1_register.hz() as f32 + 1.0));
+        if addr == 0x4003 {
+            self.ch1_sender
+                .send(SquareEvent::Note(SquareNote { hz: hz, duty: duty }))
+                .unwrap();
 
-        self.ch1_sender
-            .send(SquareEvent::Note(SquareNote {
-                hz: hz,
-                volume: volume,
-                duty: duty,
-            }))
-            .unwrap();
+            self.ch1_sender
+                .send(SquareEvent::Envelope(Envelope::new(
+                    self.ch2_register.volume,
+                    self.ch1_register.envelope_flag,
+                    !self.ch1_register.key_off_counter_flag,
+                )))
+                .unwrap();
+        }
     }
 
     pub fn write2ch(&mut self, addr: u16, value: u8) {
@@ -97,17 +97,21 @@ impl NesAPU {
             _ => panic!("can't be",),
         };
 
-        let volume = (self.ch2_register.volume as f32) / 15.0;
-
         let hz = NES_CPU_CLOCK / (16.0 * (self.ch2_register.frequency as f32 + 1.0));
 
-        self.ch2_sender
-            .send(SquareEvent::Note(SquareNote {
-                hz: hz,
-                volume: volume,
-                duty: duty,
-            }))
-            .unwrap();
+        if addr == 0x4007 {
+            self.ch2_sender
+                .send(SquareEvent::Note(SquareNote { hz: hz, duty: duty }))
+                .unwrap();
+
+            self.ch2_sender
+                .send(SquareEvent::Envelope(Envelope::new(
+                    self.ch2_register.volume,
+                    self.ch2_register.envelope_flag,
+                    !self.ch2_register.key_off_counter_flag,
+                )))
+                .unwrap();
+        }
     }
 
     pub fn write3ch(&mut self, addr: u16, value: u8) {
@@ -148,13 +152,18 @@ impl NesAPU {
     pub fn write_status(&mut self, data: u8) {
         self.status.update(data);
 
-        // TODO Startイベントを作る
-        if !self.status.contains(StatusRegister::ENABLE_1CH) {
-            self.ch1_sender.send(SquareEvent::Stop()).unwrap()
-        }
-        if !self.status.contains(StatusRegister::ENABLE_2CH) {
-            self.ch2_sender.send(SquareEvent::Stop()).unwrap()
-        }
+        self.ch1_sender
+            .send(SquareEvent::Enable(
+                self.status.contains(StatusRegister::ENABLE_1CH),
+            ))
+            .unwrap();
+
+        self.ch2_sender
+            .send(SquareEvent::Enable(
+                self.status.contains(StatusRegister::ENABLE_2CH),
+            ))
+            .unwrap();
+
         if !self.status.contains(StatusRegister::ENABLE_3CH) {
             self.ch3_sender.send(TriangleEvent::Stop()).unwrap()
         }
@@ -192,6 +201,8 @@ impl NesAPU {
                         self.status.insert(StatusRegister::ENABLE_FRAME_IRQ);
                     }
                     // エンベロープと三角波の線形カウンタのクロック生成
+                    self.ch1_sender.send(SquareEvent::EnvelopeTick()).unwrap();
+                    self.ch2_sender.send(SquareEvent::EnvelopeTick()).unwrap();
                 }
                 5 => {}
                 _ => panic!("can't be"),
@@ -201,49 +212,60 @@ impl NesAPU {
 }
 
 struct Ch1Register {
-    pub tone_volume: u8,
-    sweep: u8,
-    hz_low: u8,
-    hz_high_key_on: u8,
+    volume: u8,
+    envelope_flag: bool,
+    key_off_counter_flag: bool,
+    duty: u8,
+
+    sweep_change_amount: u8,
+    sweep_direction: u8,
+    sweep_timer_count: u8,
+    sweep_enabled: u8,
+
+    frequency: u16,
+
+    key_off_count: u8,
 }
 
 impl Ch1Register {
     pub fn new() -> Self {
         Ch1Register {
-            tone_volume: 0x00,
-            sweep: 0x00,
-            hz_low: 0x00,
-            hz_high_key_on: 0x00,
+            volume: 0,
+            envelope_flag: false,
+            key_off_counter_flag: false,
+            duty: 0,
+
+            sweep_change_amount: 0,
+            sweep_direction: 0,
+            sweep_timer_count: 0,
+            sweep_enabled: 0,
+
+            frequency: 0,
+
+            key_off_count: 0,
         }
-    }
-
-    pub fn duty(&self) -> u8 {
-        // 00：12.5%　01：25%　10：50%　11：75%
-        (self.tone_volume & 0xC0) >> 6
-    }
-
-    pub fn volume(&self) -> u8 {
-        // （0で消音、15が最大）
-        self.tone_volume & 0x0F
-    }
-
-    pub fn hz(&self) -> u16 {
-        (self.hz_high_key_on as u16 & 0x07 << 8) | (self.hz_low as u16)
     }
 
     pub fn write(&mut self, addr: u16, value: u8) {
         match addr {
             0x4000 => {
-                self.tone_volume = value;
+                self.volume = value & 0x0F;
+                self.envelope_flag = (value & 0x10) == 0;
+                self.key_off_counter_flag = (value & 0x20) == 0;
+                self.duty = (value & 0xC0) >> 6;
             }
             0x4001 => {
-                self.sweep = value;
+                self.sweep_change_amount = value & 0x07;
+                self.sweep_direction = (value & 0x08) >> 3;
+                self.sweep_timer_count = (value & 0x70) >> 4;
+                self.sweep_enabled = (value & 0x80) >> 7;
             }
             0x4002 => {
-                self.hz_low = value;
+                self.frequency = (self.frequency & 0x0700) | value as u16;
             }
             0x4003 => {
-                self.hz_high_key_on = value;
+                self.frequency = (self.frequency & 0x00FF) | (value as u16 & 0x07) << 8;
+                self.key_off_count = (value & 0xF8) >> 3;
             }
             _ => panic!("can't be"),
         }
@@ -432,6 +454,10 @@ impl Envelope {
     fn tick(&mut self) {
         self.division_period -= 1;
 
+        info!(
+            "E TICK {} {} {}",
+            self.counter, self.division_period, self.rate
+        );
         if self.division_period != 0 {
             return;
         }
@@ -444,7 +470,7 @@ impl Envelope {
                 self.counter = 0x0F;
             }
         }
-        self.division_period = self.rate + 1
+        self.division_period = self.rate + 1;
     }
 
     fn volume(&self) -> f32 {
@@ -460,14 +486,14 @@ impl Envelope {
 #[derive(Debug, Clone, PartialEq)]
 enum SquareEvent {
     Note(SquareNote),
-    Stop(),
+    Enable(bool),
     Envelope(Envelope),
+    EnvelopeTick(),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 struct SquareNote {
     hz: f32,
-    volume: f32,
     duty: f32,
 }
 
@@ -475,7 +501,9 @@ struct SquareWave {
     freq: f32,
     phase: f32,
     receiver: Receiver<SquareEvent>,
+    enabled: bool,
     note: SquareNote,
+    envelope: Envelope,
 }
 
 impl AudioCallback for SquareWave {
@@ -486,17 +514,21 @@ impl AudioCallback for SquareWave {
             let res = self.receiver.recv_timeout(Duration::from_millis(0));
             match res {
                 Ok(SquareEvent::Note(note)) => self.note = note,
-                Ok(SquareEvent::Envelope(e)) => {
-                    // TODO
-                }
-                Ok(SquareEvent::Stop()) => self.note.volume = 0.0,
+                Ok(SquareEvent::Envelope(e)) => self.envelope = e,
+                Ok(SquareEvent::EnvelopeTick()) => self.envelope.tick(),
+                Ok(SquareEvent::Enable(b)) => self.enabled = b,
                 Err(_) => {}
             }
             *x = if self.phase <= self.note.duty {
-                self.note.volume
+                self.envelope.volume()
             } else {
-                -self.note.volume
+                -self.envelope.volume()
             } * MASTER_VOLUME;
+
+            if !self.enabled {
+                *x = 0.0;
+            }
+
             self.phase = (self.phase + self.note.hz / self.freq) % 1.0;
         }
     }
@@ -518,11 +550,9 @@ fn init_square(sdl_context: &sdl2::Sdl) -> (AudioDevice<SquareWave>, Sender<Squa
             freq: spec.freq as f32,
             phase: 0.0,
             receiver: receiver,
-            note: SquareNote {
-                hz: 0.0,
-                volume: 0.0,
-                duty: 0.0,
-            },
+            enabled: true,
+            note: SquareNote { hz: 0.0, duty: 0.0 },
+            envelope: Envelope::new(0, false, false),
         })
         .unwrap();
 
