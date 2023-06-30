@@ -200,6 +200,7 @@ impl NesPPU {
             self.status.bits()
         } else {
             self.scroll.reset();
+            self.addr.reset_latch();
             let bits = self.status.bits();
             self.status.reset_vblank_status();
             self.clear_nmi_interrupt = true;

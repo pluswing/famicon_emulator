@@ -306,7 +306,7 @@ impl<'a> CPU<'a> {
     fn interrupt_nmi(&mut self) {
         debug!("** INTERRUPT_NMI **");
 
-        self._push_u16(self.program_counter + 1);
+        self._push_u16(self.program_counter);
         let mut status = self.status;
         status = status & !FLAG_BREAK;
         status = status | FLAG_BREAK2;
@@ -323,13 +323,14 @@ impl<'a> CPU<'a> {
         }
         info!("** APU IRQ **");
 
-        self._push_u16(self.program_counter + 1);
+        self._push_u16(self.program_counter);
         let mut status = self.status;
         status = status & !FLAG_BREAK;
         status = status | FLAG_BREAK2;
         self._push(self.status);
 
         self.status = self.status | FLAG_INTERRRUPT;
+        self.bus.tick(2);
         self.program_counter = self.mem_read_u16(0xFFFE);
     }
 
@@ -522,7 +523,7 @@ impl<'a> CPU<'a> {
     pub fn rti(&mut self, mode: &AddressingMode) {
         // スタックからプロセッサ フラグをプルし、続いてプログラム カウンタをプルします。
         self.status = self._pop() & !FLAG_BREAK | FLAG_BREAK2;
-        self.program_counter = self._pop_u16() - 1;
+        self.program_counter = self._pop_u16();
     }
 
     pub fn plp(&mut self, mode: &AddressingMode) {
@@ -745,8 +746,8 @@ impl<'a> CPU<'a> {
     }
 
     pub fn brk(&mut self, mode: &AddressingMode) {
-        // FLAG_INTERRRUPTが立っている場合は
-        if self.status & FLAG_INTERRRUPT != 0 {
+        // FLAG_BREAKが立っている場合は処理しない
+        if self.status & FLAG_BREAK != 0 {
             return;
         }
 
