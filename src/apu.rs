@@ -82,6 +82,14 @@ impl NesAPU {
                 !self.ch1_register.key_off_counter_flag,
             )))
             .unwrap();
+
+        self.ch1_sender
+            .send(SquareEvent::LengthCounter(LengthCounter::new(
+                !self.ch1_register.key_off_counter_flag,
+                LENGTH_COUNTER_TABLE[self.ch1_register.key_off_count as usize],
+            )))
+            .unwrap();
+
         // TODO Envelope: チャンネルの4番目のレジスタへの書き込みがあった場合、 カウンタへ$Fをセットし、分周器へエンベロープ周期をセットします。
     }
 
@@ -109,6 +117,13 @@ impl NesAPU {
                 !self.ch2_register.key_off_counter_flag,
             )))
             .unwrap();
+
+        self.ch2_sender
+            .send(SquareEvent::LengthCounter(LengthCounter::new(
+                !self.ch2_register.key_off_counter_flag,
+                LENGTH_COUNTER_TABLE[self.ch2_register.key_off_count as usize],
+            )))
+            .unwrap();
     }
 
     pub fn write3ch(&mut self, addr: u16, value: u8) {
@@ -124,7 +139,7 @@ impl NesAPU {
     pub fn write4ch(&mut self, addr: u16, value: u8) {
         self.ch4_register.write(addr, value);
 
-        let hz = NES_CPU_CLOCK / NOIZE_TABLE[self.ch4_register.frequency as usize] as f32;
+        let hz = NES_CPU_CLOCK / NOISE_TABLE[self.ch4_register.frequency as usize] as f32;
         let is_long = match self.ch4_register.kind {
             NoiseKind::Long => true,
             _ => false,
@@ -196,6 +211,12 @@ impl NesAPU {
                 4 => {
                     if self.counter == 2 || self.counter == 4 {
                         // 長さカウンタとスイープユニットのクロック生成
+                        self.ch1_sender
+                            .send(SquareEvent::LengthCounterTick())
+                            .unwrap();
+                        self.ch2_sender
+                            .send(SquareEvent::LengthCounterTick())
+                            .unwrap();
                     }
                     if self.counter == 4 {
                         // 割り込みフラグセット
@@ -495,11 +516,46 @@ impl Envelope {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+struct LengthCounter {
+    enabled: bool,
+    counter: u8,
+}
+
+impl LengthCounter {
+    fn new(enabled: bool, counter: u8) -> Self {
+        LengthCounter { enabled, counter }
+    }
+
+    fn tick(&mut self) {
+        if !self.enabled {
+            return;
+        }
+        if self.counter > 0 {
+            self.counter -= 1;
+        }
+    }
+
+    fn mute(&self) -> bool {
+        self.enabled && self.counter == 0
+    }
+}
+
+lazy_static! {
+    pub static ref LENGTH_COUNTER_TABLE: Vec<u8> = vec![
+        0x05, 0x7F, 0x0A, 0x01, 0x14, 0x02, 0x28, 0x03, 0x50, 0x04, 0x1E, 0x05, 0x07, 0x06, 0x0D,
+        0x07, 0x06, 0x08, 0x0C, 0x09, 0x18, 0x0A, 0x30, 0x0B, 0x60, 0x0C, 0x24, 0x0D, 0x08, 0x0E,
+        0x10, 0x0F,
+    ];
+}
+
+#[derive(Debug, Clone, PartialEq)]
 enum SquareEvent {
     Note(SquareNote),
     Enable(bool),
     Envelope(Envelope),
     EnvelopeTick(),
+    LengthCounter(LengthCounter),
+    LengthCounterTick(),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -515,6 +571,7 @@ struct SquareWave {
     enabled: bool,
     note: SquareNote,
     envelope: Envelope,
+    length_counter: LengthCounter,
 }
 
 impl AudioCallback for SquareWave {
@@ -529,6 +586,9 @@ impl AudioCallback for SquareWave {
                     Ok(SquareEvent::Envelope(e)) => self.envelope = e,
                     Ok(SquareEvent::EnvelopeTick()) => self.envelope.tick(),
                     Ok(SquareEvent::Enable(b)) => self.enabled = b,
+                    Ok(SquareEvent::LengthCounter(l)) => self.length_counter = l,
+                    Ok(SquareEvent::LengthCounterTick()) => self.length_counter.tick(),
+
                     Err(_) => break,
                 }
             }
@@ -537,6 +597,10 @@ impl AudioCallback for SquareWave {
             } else {
                 -self.envelope.volume()
             } * MASTER_VOLUME;
+
+            if self.length_counter.mute() {
+                *x = 0.0;
+            }
 
             if !self.enabled {
                 *x = 0.0;
@@ -566,6 +630,7 @@ fn init_square(sdl_context: &sdl2::Sdl) -> (AudioDevice<SquareWave>, Sender<Squa
             enabled: true,
             note: SquareNote { hz: 0.0, duty: 0.0 },
             envelope: Envelope::new(0, false, false),
+            length_counter: LengthCounter::new(false, 0),
         })
         .unwrap();
 
@@ -649,7 +714,7 @@ fn init_triangle(sdl_context: &sdl2::Sdl) -> (AudioDevice<TriangleWave>, Sender<
 }
 
 lazy_static! {
-    pub static ref NOIZE_TABLE: Vec<u16> = vec![
+    pub static ref NOISE_TABLE: Vec<u16> = vec![
         0x0002, 0x0004, 0x0008, 0x0010, 0x0020, 0x0030, 0x0040, 0x0050, 0x0065, 0x007F, 0x00BE,
         0x00FE, 0x017D, 0x01FC, 0x03F9, 0x07F2,
     ];
