@@ -85,7 +85,7 @@ impl NesAPU {
 
         self.ch1_sender
             .send(SquareEvent::LengthCounter(LengthCounter::new(
-                !self.ch1_register.key_off_counter_flag,
+                self.ch1_register.key_off_counter_flag,
                 LENGTH_COUNTER_TABLE[self.ch1_register.key_off_count as usize],
             )))
             .unwrap();
@@ -120,7 +120,7 @@ impl NesAPU {
 
         self.ch2_sender
             .send(SquareEvent::LengthCounter(LengthCounter::new(
-                !self.ch2_register.key_off_counter_flag,
+                self.ch2_register.key_off_counter_flag,
                 LENGTH_COUNTER_TABLE[self.ch2_register.key_off_count as usize],
             )))
             .unwrap();
@@ -133,6 +133,13 @@ impl NesAPU {
 
         self.ch3_sender
             .send(TriangleEvent::Note(TriangleNote { hz: hz }))
+            .unwrap();
+
+        self.ch3_sender
+            .send(TriangleEvent::LengthCounter(LengthCounter::new(
+                self.ch3_register.key_off_counter_flag,
+                LENGTH_COUNTER_TABLE[self.ch3_register.key_off_count as usize],
+            )))
             .unwrap();
     }
 
@@ -152,6 +159,13 @@ impl NesAPU {
                 is_long: is_long,
                 volume: volume,
             }))
+            .unwrap();
+
+        self.ch4_sender
+            .send(NoiseEvent::LengthCounter(LengthCounter::new(
+                self.ch4_register.key_off_counter_flag,
+                LENGTH_COUNTER_TABLE[self.ch4_register.key_off_count as usize],
+            )))
             .unwrap();
     }
 
@@ -549,6 +563,57 @@ lazy_static! {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+struct Sweep {
+    hz: u16,
+    change_amount: u8,
+    direction: u8,
+    timer_count: u8,
+    enabled: bool,
+    counter: u8,
+}
+
+impl Sweep {
+    fn new(hz: u16, change_amount: u8, direction: u8, timer_count: u8, enabled: bool) -> Self {
+        Sweep {
+            hz,
+            change_amount,
+            direction,
+            timer_count,
+            enabled,
+        }
+    }
+
+    fn tick(&mut self) {
+        if !self.enabled {
+            return;
+        }
+        if self.change_amount == 0 {
+            return;
+        }
+        // TODO チャンネルの長さカウンタがゼロではない
+
+        self.counter += 1;
+        if self.counter < (self.timer_count + 1) {
+            return;
+        }
+
+        self.counter = 0;
+
+        if self.direction == 0 {
+            // しり下がりモード    新しい周期 = 周期 + (周期 >> N)
+            self.hz = self.hz + (self.hz >> self.change_amount);
+        } else {
+            // しり上がりモード    新しい周期 = 周期 - (周期 >> N)
+            self.hz = self.hz - (self.hz >> self.change_amount);
+        }
+    }
+
+    fn frequency() -> f32 {
+        // TODO
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 enum SquareEvent {
     Note(SquareNote),
     Enable(bool),
@@ -643,6 +708,8 @@ fn init_square(sdl_context: &sdl2::Sdl) -> (AudioDevice<SquareWave>, Sender<Squa
 enum TriangleEvent {
     Note(TriangleNote),
     Enable(bool),
+    LengthCounter(LengthCounter),
+    LengthCounterTick(),
 }
 #[derive(Debug, Clone, PartialEq)]
 struct TriangleNote {
@@ -656,6 +723,7 @@ struct TriangleWave {
 
     enabled: bool,
     note: TriangleNote,
+    length_counter: LengthCounter,
 }
 
 impl AudioCallback for TriangleWave {
@@ -668,6 +736,8 @@ impl AudioCallback for TriangleWave {
                 match res {
                     Ok(TriangleEvent::Note(note)) => self.note = note,
                     Ok(TriangleEvent::Enable(b)) => self.enabled = b,
+                    Ok(TriangleEvent::LengthCounter(l)) => self.length_counter = l,
+                    Ok(TriangleEvent::LengthCounterTick()) => self.length_counter.tick(),
                     Err(_) => break,
                 }
             }
@@ -678,6 +748,10 @@ impl AudioCallback for TriangleWave {
             } - 0.25)
                 * 4.0
                 * MASTER_VOLUME;
+
+            if self.length_counter.mute() {
+                *x = 0.0;
+            }
 
             if !self.enabled {
                 *x = 0.0;
@@ -705,6 +779,7 @@ fn init_triangle(sdl_context: &sdl2::Sdl) -> (AudioDevice<TriangleWave>, Sender<
             receiver: receiver,
             enabled: true,
             note: TriangleNote { hz: 0.0 },
+            length_counter: LengthCounter::new(false, 0),
         })
         .unwrap();
 
@@ -726,6 +801,8 @@ enum NoiseEvent {
     Enable(bool),
     Envelope(Envelope),
     EnvelopeTick(),
+    LengthCounter(LengthCounter),
+    LengthCounterTick(),
 }
 #[derive(Debug, Clone, PartialEq)]
 struct NoiseNote {
@@ -745,6 +822,7 @@ struct NoiseWave {
     enabled: bool,
     envelope: Envelope,
     note: NoiseNote,
+    length_counter: LengthCounter,
 }
 
 impl AudioCallback for NoiseWave {
@@ -759,11 +837,17 @@ impl AudioCallback for NoiseWave {
                     Ok(NoiseEvent::Enable(b)) => self.enabled = b,
                     Ok(NoiseEvent::Envelope(e)) => self.envelope = e,
                     Ok(NoiseEvent::EnvelopeTick()) => self.envelope.tick(),
+                    Ok(NoiseEvent::LengthCounter(l)) => self.length_counter = l,
+                    Ok(NoiseEvent::LengthCounterTick()) => self.length_counter.tick(),
                     Err(_) => break,
                 }
             }
 
             *x = if self.value { 0.0 } else { 1.0 } * self.envelope.volume() * MASTER_VOLUME;
+
+            if self.length_counter.mute() {
+                *x = 0.0;
+            }
 
             if !self.enabled {
                 *x = 0.0;
@@ -834,6 +918,7 @@ fn init_noise(sdl_context: &sdl2::Sdl) -> (AudioDevice<NoiseWave>, Sender<NoiseE
                 is_long: true,
                 volume: 0.0,
             },
+            length_counter: LengthCounter::new(false, 0),
         })
         .unwrap();
 
