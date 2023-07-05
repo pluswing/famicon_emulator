@@ -69,10 +69,8 @@ impl NesAPU {
             _ => panic!("can't be",),
         };
 
-        let hz = NES_CPU_CLOCK / (16.0 * (self.ch1_register.frequency as f32 + 1.0));
-
         self.ch1_sender
-            .send(SquareEvent::Note(SquareNote { hz: hz, duty: duty }))
+            .send(SquareEvent::Note(SquareNote { duty: duty }))
             .unwrap();
 
         self.ch1_sender
@@ -90,7 +88,16 @@ impl NesAPU {
             )))
             .unwrap();
 
-        // TODO Envelope: チャンネルの4番目のレジスタへの書き込みがあった場合、 カウンタへ$Fをセットし、分周器へエンベロープ周期をセットします。
+        self.ch1_sender
+            .send(SquareEvent::Sweep(Sweep::new(
+                self.ch1_register.frequency,
+                self.ch1_register.sweep_change_amount,
+                self.ch1_register.sweep_direction,
+                self.ch1_register.sweep_timer_count,
+                self.ch1_register.sweep_enabled,
+            )))
+            .unwrap();
+        // TODO Envelope: チャンネルzの4番目のレジスタへの書き込みがあった場合、 カウンタへ$Fをセットし、分周器へエンベロープ周期をセットします。
     }
 
     pub fn write2ch(&mut self, addr: u16, value: u8) {
@@ -104,10 +111,8 @@ impl NesAPU {
             _ => panic!("can't be",),
         };
 
-        let hz = NES_CPU_CLOCK / (16.0 * (self.ch2_register.frequency as f32 + 1.0));
-
         self.ch2_sender
-            .send(SquareEvent::Note(SquareNote { hz: hz, duty: duty }))
+            .send(SquareEvent::Note(SquareNote { duty: duty }))
             .unwrap();
 
         self.ch2_sender
@@ -122,6 +127,16 @@ impl NesAPU {
             .send(SquareEvent::LengthCounter(LengthCounter::new(
                 self.ch2_register.key_off_counter_flag,
                 LENGTH_COUNTER_TABLE[self.ch2_register.key_off_count as usize],
+            )))
+            .unwrap();
+
+        self.ch2_sender
+            .send(SquareEvent::Sweep(Sweep::new(
+                self.ch2_register.frequency,
+                self.ch2_register.sweep_change_amount,
+                self.ch2_register.sweep_direction,
+                self.ch2_register.sweep_timer_count,
+                self.ch2_register.sweep_enabled,
             )))
             .unwrap();
     }
@@ -223,14 +238,13 @@ impl NesAPU {
 
             match self.frame_counter.mode() {
                 4 => {
+                    // - - - f      60 Hz
+                    // - l - l     120 Hz
+                    // e e e e     240 Hz
                     if self.counter == 2 || self.counter == 4 {
                         // 長さカウンタとスイープユニットのクロック生成
-                        self.ch1_sender
-                            .send(SquareEvent::LengthCounterTick())
-                            .unwrap();
-                        self.ch2_sender
-                            .send(SquareEvent::LengthCounterTick())
-                            .unwrap();
+                        self.send_length_counter_tick();
+                        self.send_sweep_tick();
                     }
                     if self.counter == 4 {
                         // 割り込みフラグセット
@@ -238,19 +252,21 @@ impl NesAPU {
                         self.status.insert(StatusRegister::ENABLE_FRAME_IRQ);
                     }
                     // エンベロープと三角波の線形カウンタのクロック生成
-                    self.ch1_sender.send(SquareEvent::EnvelopeTick()).unwrap();
-                    self.ch2_sender.send(SquareEvent::EnvelopeTick()).unwrap();
-                    self.ch4_sender.send(NoiseEvent::EnvelopeTick()).unwrap();
+                    self.send_envelope_tick();
                 }
                 5 => {
-                    if self.counter == 0 || self.counter == 2 {
+                    // - - - - -   (割り込みフラグはセットしない)
+                    // l - l - -    96 Hz
+                    // e e e e -   192 Hz
+
+                    if self.counter == 1 || self.counter == 3 {
                         // 長さカウンタとスイープユニットのクロック生成
+                        self.send_length_counter_tick();
+                        self.send_sweep_tick();
                     }
-                    if self.counter >= 4 {
+                    if self.counter <= 4 {
                         // エンベロープと三角波の線形カウンタのクロック生成
-                        self.ch1_sender.send(SquareEvent::EnvelopeTick()).unwrap();
-                        self.ch2_sender.send(SquareEvent::EnvelopeTick()).unwrap();
-                        self.ch4_sender.send(NoiseEvent::EnvelopeTick()).unwrap();
+                        self.send_envelope_tick();
                     }
                     if self.counter == 5 {
                         self.counter = 0;
@@ -259,6 +275,32 @@ impl NesAPU {
                 _ => panic!("can't be"),
             }
         }
+    }
+
+    fn send_envelope_tick(&self) {
+        self.ch1_sender.send(SquareEvent::EnvelopeTick()).unwrap();
+        self.ch2_sender.send(SquareEvent::EnvelopeTick()).unwrap();
+        self.ch4_sender.send(NoiseEvent::EnvelopeTick()).unwrap();
+    }
+
+    fn send_length_counter_tick(&self) {
+        self.ch1_sender
+            .send(SquareEvent::LengthCounterTick())
+            .unwrap();
+        self.ch2_sender
+            .send(SquareEvent::LengthCounterTick())
+            .unwrap();
+        self.ch3_sender
+            .send(TriangleEvent::LengthCounterTick())
+            .unwrap();
+        self.ch4_sender
+            .send(NoiseEvent::LengthCounterTick())
+            .unwrap();
+    }
+
+    fn send_sweep_tick(&self) {
+        self.ch1_sender.send(SquareEvent::SweepTick()).unwrap();
+        self.ch2_sender.send(SquareEvent::SweepTick()).unwrap();
     }
 }
 
@@ -271,7 +313,7 @@ struct Ch1Register {
     sweep_change_amount: u8,
     sweep_direction: u8,
     sweep_timer_count: u8,
-    sweep_enabled: u8,
+    sweep_enabled: bool,
 
     frequency: u16,
 
@@ -289,7 +331,7 @@ impl Ch1Register {
             sweep_change_amount: 0,
             sweep_direction: 0,
             sweep_timer_count: 0,
-            sweep_enabled: 0,
+            sweep_enabled: false,
 
             frequency: 0,
 
@@ -309,7 +351,7 @@ impl Ch1Register {
                 self.sweep_change_amount = value & 0x07;
                 self.sweep_direction = (value & 0x08) >> 3;
                 self.sweep_timer_count = (value & 0x70) >> 4;
-                self.sweep_enabled = (value & 0x80) >> 7;
+                self.sweep_enabled = (value & 0x80) != 0;
             }
             0x4002 => {
                 self.frequency = (self.frequency & 0x0700) | value as u16;
@@ -332,7 +374,7 @@ struct Ch2Register {
     sweep_change_amount: u8,
     sweep_direction: u8,
     sweep_timer_count: u8,
-    sweep_enabled: u8,
+    sweep_enabled: bool,
 
     frequency: u16,
 
@@ -350,7 +392,7 @@ impl Ch2Register {
             sweep_change_amount: 0,
             sweep_direction: 0,
             sweep_timer_count: 0,
-            sweep_enabled: 0,
+            sweep_enabled: false,
 
             frequency: 0,
 
@@ -370,7 +412,7 @@ impl Ch2Register {
                 self.sweep_change_amount = value & 0x07;
                 self.sweep_direction = (value & 0x08) >> 3;
                 self.sweep_timer_count = (value & 0x70) >> 4;
-                self.sweep_enabled = (value & 0x80) >> 7;
+                self.sweep_enabled = (value & 0x80) != 0;
             }
             0x4006 => {
                 self.frequency = (self.frequency & 0x0700) | value as u16;
@@ -564,7 +606,7 @@ lazy_static! {
 
 #[derive(Debug, Clone, PartialEq)]
 struct Sweep {
-    hz: u16,
+    frequency: u16,
     change_amount: u8,
     direction: u8,
     timer_count: u8,
@@ -573,13 +615,20 @@ struct Sweep {
 }
 
 impl Sweep {
-    fn new(hz: u16, change_amount: u8, direction: u8, timer_count: u8, enabled: bool) -> Self {
+    fn new(
+        frequency: u16,
+        change_amount: u8,
+        direction: u8,
+        timer_count: u8,
+        enabled: bool,
+    ) -> Self {
         Sweep {
-            hz,
+            frequency,
             change_amount,
             direction,
             timer_count,
             enabled,
+            counter: 0,
         }
     }
 
@@ -601,15 +650,23 @@ impl Sweep {
 
         if self.direction == 0 {
             // しり下がりモード    新しい周期 = 周期 + (周期 >> N)
-            self.hz = self.hz + (self.hz >> self.change_amount);
+            self.frequency = self.frequency + (self.frequency >> self.change_amount);
         } else {
             // しり上がりモード    新しい周期 = 周期 - (周期 >> N)
-            self.hz = self.hz - (self.hz >> self.change_amount);
+            self.frequency = self.frequency - (self.frequency >> self.change_amount);
+        }
+
+        // もしチャンネルの周期が8未満か、$7FFより大きくなったなら、スイープを停止し、 チャンネルを無音化します。
+        if self.frequency < 8 || self.frequency >= 0x7FF {
+            self.frequency = 0;
         }
     }
 
-    fn frequency() -> f32 {
-        // TODO
+    fn hz(&self) -> f32 {
+        if self.frequency == 0 {
+            return 0.0;
+        }
+        NES_CPU_CLOCK / (16.0 * (self.frequency as f32 + 1.0))
     }
 }
 
@@ -621,11 +678,12 @@ enum SquareEvent {
     EnvelopeTick(),
     LengthCounter(LengthCounter),
     LengthCounterTick(),
+    Sweep(Sweep),
+    SweepTick(),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 struct SquareNote {
-    hz: f32,
     duty: f32,
 }
 
@@ -637,6 +695,7 @@ struct SquareWave {
     note: SquareNote,
     envelope: Envelope,
     length_counter: LengthCounter,
+    sweep: Sweep,
 }
 
 impl AudioCallback for SquareWave {
@@ -653,7 +712,8 @@ impl AudioCallback for SquareWave {
                     Ok(SquareEvent::Enable(b)) => self.enabled = b,
                     Ok(SquareEvent::LengthCounter(l)) => self.length_counter = l,
                     Ok(SquareEvent::LengthCounterTick()) => self.length_counter.tick(),
-
+                    Ok(SquareEvent::Sweep(s)) => self.sweep = s,
+                    Ok(SquareEvent::SweepTick()) => self.sweep.tick(),
                     Err(_) => break,
                 }
             }
@@ -670,8 +730,10 @@ impl AudioCallback for SquareWave {
             if !self.enabled {
                 *x = 0.0;
             }
-
-            self.phase = (self.phase + self.note.hz / self.freq) % 1.0;
+            let hz = self.sweep.hz();
+            if hz != 0.0 {
+                self.phase = (self.phase + hz / self.freq) % 1.0;
+            }
         }
     }
 }
@@ -693,9 +755,10 @@ fn init_square(sdl_context: &sdl2::Sdl) -> (AudioDevice<SquareWave>, Sender<Squa
             phase: 0.0,
             receiver: receiver,
             enabled: true,
-            note: SquareNote { hz: 0.0, duty: 0.0 },
+            note: SquareNote { duty: 0.0 },
             envelope: Envelope::new(0, false, false),
             length_counter: LengthCounter::new(false, 0),
+            sweep: Sweep::new(0, 0, 0, 0, false),
         })
         .unwrap();
 
