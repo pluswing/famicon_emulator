@@ -45,4 +45,12 @@ pub mod test {
     pub fn ff3_rom() -> Rom {
         load_rom("rom/Final Fantasy III (Japan).nes")
     }
+
+    pub fn mario3_rom() -> Rom {
+        load_rom("rom/Super Mario Bros. 3 (Japan) (Rev 1).nes")
+    }
+
+    pub fn tamago_rom() -> Rom {
+        load_rom("rom/Yoshi no Tamago (Japan).nes")
+    }
 }

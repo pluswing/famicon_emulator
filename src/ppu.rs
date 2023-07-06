@@ -6,7 +6,6 @@ use crate::{cpu::IN_TRACE, rom::Mirroring, MAPPER};
 
 pub struct NesPPU {
     pub chr_rom: Vec<u8>,
-    pub mirroring: Mirroring,
     pub is_chr_ram: bool,
 
     pub palette_table: [u8; 32],
@@ -29,6 +28,7 @@ pub struct NesPPU {
     pub scroll: ScrollRegister,
 
     pub cycles: usize,
+    pub total_cycles: usize,
     pub scanline: usize,
     pub nmi_interrupt: Option<i32>,
     pub clear_nmi_interrupt: bool,
@@ -41,10 +41,9 @@ pub struct NesPPU {
 }
 
 impl NesPPU {
-    pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring, is_chr_ram: bool) -> Self {
+    pub fn new(chr_rom: Vec<u8>, is_chr_ram: bool) -> Self {
         NesPPU {
             chr_rom: chr_rom,
-            mirroring: mirroring,
             is_chr_ram: is_chr_ram,
             vram: [0; 2048],
             oam_data: [0; 64 * 4],
@@ -56,7 +55,8 @@ impl NesPPU {
             mask: MaskRegister::new(),
             scroll: ScrollRegister::new(),
             internal_data_buf: 0,
-            cycles: 0,
+            cycles: 0, // 21,
+            total_cycles: 0,
             scanline: 0,
             nmi_interrupt: None,
             clear_nmi_interrupt: false,
@@ -74,52 +74,52 @@ impl NesPPU {
         if !unsafe { IN_TRACE } {
             self.increment_vram_addr();
         }
-        debug!("WRITE PPU: {:04X} => {:02X}", addr, value);
+        // debug!("WRITE PPU: {:04X} => {:02X}", addr, value);
 
         match addr {
             0..=0x1FFF => {
                 // FIXME
-                debug!("write CHR_ROM {:04X} => {:02X}", addr, value);
-                if self.is_chr_ram {
-                    self.chr_rom[addr as usize] = value;
-                }
+                // info!("write CHR_ROM {:04X} => {:02X}", addr, value);
+                let mirror_addr = MAPPER.lock().unwrap().mirror_chr_rom_addr(addr as usize);
+                self.chr_rom[mirror_addr] = value;
+                // if self.is_chr_ram {}
             }
             0x2000..=0x2FFF => {
-                trace!(
-                    "WRITE PPU_VRAM {:04X} {:02X} => ({:02X})",
-                    addr,
-                    self.mirror_vram_addr(addr) as usize,
-                    value
-                );
+                // trace!(
+                //     "WRITE PPU_VRAM {:04X} {:02X} => ({:02X})",
+                //     addr,
+                //     self.mirror_vram_addr(addr) as usize,
+                //     value
+                // );
                 self.vram[self.mirror_vram_addr(addr) as usize] = value;
             }
             0x3000..=0x3EFF => {
-                trace!(
-                    "WRITE PPU_VRAM MIRROR {:04X} {:02X} => ({:02X})",
-                    addr,
-                    self.mirror_vram_addr(addr) as usize,
-                    value
-                );
+                // trace!(
+                //     "WRITE PPU_VRAM MIRROR {:04X} {:02X} => ({:02X})",
+                //     addr,
+                //     self.mirror_vram_addr(addr) as usize,
+                //     value
+                // );
                 self.vram[self.mirror_vram_addr(addr) as usize] = value;
             }
             0x3F00..=0x3F1F => {
-                debug!(
-                    "WRITE PALATTE {:04X} {:02X} => ({:02X}) SL={}",
-                    addr,
-                    self.mirror_palette_addr(addr) as usize,
-                    value,
-                    self.scanline
-                );
+                // debug!(
+                //     "WRITE PALATTE {:04X} {:02X} => ({:02X}) SL={}",
+                //     addr,
+                //     self.mirror_palette_addr(addr) as usize,
+                //     value,
+                //     self.scanline
+                // );
                 self.write_palette_table(addr, value)
             }
             0x3F20..=0x3FFF => {
-                debug!(
-                    "WRITE PALATTE MIRROR {:04X} {:02X} => ({:02X}) SL={}",
-                    addr,
-                    self.mirror_palette_addr(addr) as usize,
-                    value,
-                    self.scanline
-                );
+                // debug!(
+                //     "WRITE PALATTE MIRROR {:04X} {:02X} => ({:02X}) SL={}",
+                //     addr,
+                //     self.mirror_palette_addr(addr) as usize,
+                //     value,
+                //     self.scanline
+                // );
                 self.write_palette_table(addr, value)
             }
             _ => panic!("unexpected access to mirrored space {}", addr),
@@ -195,6 +195,9 @@ impl NesPPU {
     }
 
     pub fn read_status(&mut self) -> u8 {
+        if self.total_cycles < 30000 {
+            return 0;
+        }
         // スクロール ($2005)  PPUSTATUSを読み取ってアドレス ラッチをリセットした後
         if unsafe { IN_TRACE } {
             self.status.bits()
@@ -221,7 +224,7 @@ impl NesPPU {
     }
 
     pub fn write_to_oam_data(&mut self, value: u8) {
-        debug!("OAM: {:04X} => {:02X}", self.oam_addr, value);
+        // debug!("OAM: {:04X} => {:02X}", self.oam_addr, value);
         self.oam_data[self.oam_addr as usize] = value;
         self.oam_addr = self.oam_addr.wrapping_add(1)
     }
@@ -233,7 +236,7 @@ impl NesPPU {
     pub fn write_to_oam_dma(&mut self, values: [u8; 256]) {
         let base = self.oam_addr as usize;
         // OAM ADDRに0以外が設定されている場合、その値以降のデータが反映対象になる。
-        debug!("OAM DMA OFFSET={:02X}", base);
+        info!("OAM DMA OFFSET={:02X}", base);
         self.oam_data[base..256].copy_from_slice(&values[base..256]);
     }
 
@@ -250,7 +253,7 @@ impl NesPPU {
         if !unsafe { IN_TRACE } {
             self.increment_vram_addr();
         }
-        debug!("READ PPU: {:04X}", addr);
+        // debug!("READ PPU: {:04X}", addr);
 
         match addr {
             0..=0x1FFF => {
@@ -298,7 +301,7 @@ impl NesPPU {
         let mirrored_vram = addr & 0b10_1111_1111_1111;
         let vram_index = mirrored_vram - 0x2000;
         let name_table = vram_index / 0x400;
-        match (&self.mirroring, name_table) {
+        match (MAPPER.lock().unwrap().mirroring(), name_table) {
             (Mirroring::VERTICAL, 2) => vram_index - 0x800,
             (Mirroring::VERTICAL, 3) => vram_index - 0x800,
             (Mirroring::HORIZONTAL, 2) => vram_index - 0x400,
@@ -310,17 +313,27 @@ impl NesPPU {
 
     pub fn tick(&mut self, cycles: u8) -> bool {
         self.cycles += cycles as usize;
+        self.total_cycles += cycles as usize;
+        if self.total_cycles > 30000 {
+            self.total_cycles = 30000
+        }
         if self.cycles >= 341 {
             if self.is_sprite_zero_hit(self.cycles) {
                 self.status.set_sprite_zero_hit(true);
             }
 
+            if self.sprite_count_by_scanline(self.scanline) > 8 {
+                self.status.set_sprite_overflow(true);
+            }
+
             self.cycles = self.cycles - 341;
             self.scanline += 1;
+            // MAPPER.lock().unwrap().scanline(self.scanline);
 
             if self.scanline == 241 {
                 self.status.set_vblank_status(true);
                 self.status.set_sprite_zero_hit(false);
+                self.status.set_sprite_overflow(false);
                 if self.ctrl.generate_vblank_nmi() {
                     // self.status.set_vblank_status(true);
                     self.nmi_interrupt = Some(1);
@@ -348,6 +361,18 @@ impl NesPPU {
         let y = self.oam_data[0] as usize;
         let x = self.oam_data[3] as usize;
         (y == self.scanline as usize) && x <= cycle && self.mask.show_sprites()
+    }
+
+    pub fn sprite_count_by_scanline(&self, scanline: usize) -> u8 {
+        let mut count = 0;
+        for i in 0..64 {
+            let y = self.oam_data[i * 4] as i16;
+            let diff = y - scanline as i16;
+            if diff >= 0 && diff < 8 {
+                count += 1
+            }
+        }
+        return count;
     }
 }
 
@@ -503,6 +528,10 @@ impl StatusRegister {
 
     pub fn set_sprite_zero_hit(&mut self, value: bool) {
         self.set(StatusRegister::SPRITE_ZERO_HIT, value)
+    }
+
+    pub fn set_sprite_overflow(&mut self, value: bool) {
+        self.set(StatusRegister::SPRITE_OVERFLOW, value)
     }
 
     pub fn update(&mut self, data: u8) {

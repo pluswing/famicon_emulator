@@ -49,7 +49,7 @@ impl Rom {
 
         let chr_rom = if chr_rom_size == 0 {
             // chr_rom_size=0の場合、8KBのCHR_RAMが存在する
-            let blank_chr_ram: Vec<u8> = vec![0; CHR_ROM_PAGE_SIZE];
+            let blank_chr_ram: Vec<u8> = vec![0; CHR_ROM_PAGE_SIZE * 16];
             blank_chr_ram
         } else {
             raw[chr_rom_start..(chr_rom_start + chr_rom_size)].to_vec()

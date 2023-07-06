@@ -14,7 +14,7 @@ mod ppu;
 mod render;
 mod rom;
 
-use crate::cartridge::test::{dq2_rom, dq3_rom, dq4_rom, ff3_rom};
+use crate::cartridge::test::{dq2_rom, dq3_rom, dq4_rom, ff3_rom, mario3_rom, tamago_rom};
 use crate::cpu::{trace, IN_TRACE};
 use crate::mapper::{mapper_from_rom, Mapper0, Mapper1};
 
@@ -40,17 +40,28 @@ use std::io::Write;
 use std::sync::Mutex;
 use std::time::Duration;
 
+pub static mut TRACE_ENABLE: bool = true;
+
 lazy_static! {
+    // nestest
+    // pub static ref MAPPER: Mutex::<Box<Mapper0>> = Mutex::new(Box::new(Mapper0::new(16 * 1024)));
     // DQ2
     // pub static ref MAPPER: Mutex::<Box<Mapper2>> = Mutex::new(Box::new(Mapper2::new(128 * 1024)));
 
     // DQ3
     // pub static ref MAPPER: Mutex::<Box<Mapper1>> = Mutex::new(Box::new(Mapper1::new(256 * 1024)));
     // DQ4
-    // pub static ref MAPPER: Mutex::<Box<Mapper1>> = Mutex::new(Box::new(Mapper1::new(512 * 1024)));
+    pub static ref MAPPER: Mutex::<Box<Mapper1>> = Mutex::new(Box::new(Mapper1::new(512 * 1024)));
+    // ヨッシーのたまご
+    // pub static ref MAPPER: Mutex::<Box<Mapper1>> = Mutex::new(Box::new(Mapper1::new(128 * 1024)));
 
     // FF3
-    pub static ref MAPPER: Mutex::<Box<Mapper4>> = Mutex::new(Box::new(Mapper4::new(512 * 1024)));
+    // pub static ref MAPPER: Mutex::<Box<Mapper4>> = Mutex::new(Box::new(Mapper4::new(512 * 1024)));
+
+    // Mario3
+    // pub static ref MAPPER: Mutex::<Box<Mapper4>> = Mutex::new(Box::new(Mapper4::new(256 * 1024)));
+
+    // pub static ref MAPPER: Mutex::<Box<Mapper1>> = Mutex::new(Box::new(Mapper1::new(256 * 1024)));
 }
 
 fn main() {
@@ -58,9 +69,11 @@ fn main() {
         .format(|buf, record| {
             let style = buf.style();
             if unsafe { IN_TRACE } {
-                writeln!(buf, "[TRACE] {}", style.value(record.args()))
+                // writeln!(buf, "[TRACE] {}", style.value(record.args()))
+                Ok(())
             } else {
-                writeln!(buf, "        {}", style.value(record.args()))
+                // writeln!(buf, "        {}", style.value(record.args()))
+                writeln!(buf, "{}", style.value(record.args()))
             }
         })
         .format_timestamp(None)
@@ -99,11 +112,18 @@ fn main() {
     let rom = load_rom("rom/nes-test-roms/cpu_exec_space/test_cpu_exec_space_ppuio.nes");
     let rom = load_rom("rom/nes-test-roms/blargg_litewall/blargg_litewall-10c.nes");
     let rom = load_rom("rom/Championship Lode Runner (Japan).nes");
-    let rom = mario_rom();
-    let rom = dq4_rom();
-    let rom = dq3_rom();
+    let rom = load_rom("rom/nes-test-roms/MMC1_A12/mmc1_a12.nes");
+    let rom = mario3_rom();
+    let rom = tamago_rom();
     let rom = dq2_rom();
+    let rom = test_rom();
+
+    let rom = mario_rom();
+    let rom = load_rom("rom/nes-test-roms/cpu_timing_test6/cpu_timing_test.nes");
+    let rom = load_rom("rom/nes-test-roms/scanline/scanline.nes");
     let rom = ff3_rom();
+    let rom = dq3_rom();
+    let rom = dq4_rom();
 
     info!(
         "ROM: mapper={}, mirroring={:?} chr_ram={} PRG={}KB, CHR={}KB",
@@ -130,6 +150,13 @@ fn main() {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => std::process::exit(0),
+                Event::KeyDown {
+                    keycode: Some(Keycode::T),
+                    ..
+                } => {
+                    // println!("*** TRACE ENABLED ***");
+                    unsafe { TRACE_ENABLE = true }
+                }
                 Event::KeyDown { keycode, .. } => {
                     if let Some(key) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
                         joypad1.set_button_pressed_status(*key, true);
@@ -143,15 +170,17 @@ fn main() {
                 _ => { /* do nothing */ }
             }
         }
-        std::thread::sleep(Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis(14));
     });
 
     let mut cpu = CPU::new(bus);
 
     cpu.reset();
     cpu.run_with_callback(move |cpu| {
-        if log_enabled!(Level::Trace) {
-            trace(cpu);
+        if unsafe { TRACE_ENABLE } {
+            if log_enabled!(Level::Trace) {
+                trace(cpu);
+            }
         }
     });
 

@@ -9,7 +9,7 @@ pub struct Bus<'call> {
     cpu_vram: [u8; 2048],
     save_ram: [u8; 8192], // 8KB
     prg_rom: Vec<u8>,
-    ppu: NesPPU,
+    pub ppu: NesPPU,
     joypad1: Joypad,
     joypad2: Joypad,
     apu: NesAPU,
@@ -23,10 +23,10 @@ impl<'call> Bus<'call> {
     where
         F: FnMut(&NesPPU, &mut Joypad) + 'call,
     {
-        let ppu = NesPPU::new(rom.chr_rom, rom.screen_mirroring, rom.is_chr_ram);
+        let ppu = NesPPU::new(rom.chr_rom, rom.is_chr_ram);
         Bus {
-            cpu_vram: [0; 2048],
-            save_ram: [0; 8192],
+            cpu_vram: [0xFF; 2048],
+            save_ram: [0xFF; 8192],
             prg_rom: rom.prg_rom,
             ppu: ppu,
             joypad1: Joypad::new(),
@@ -90,12 +90,12 @@ impl Mem for Bus<'_> {
             RAM..=RAM_MIRRORS_END => {
                 let mirror_down_addr = addr & 0b_0000_0111_1111_1111;
                 let v = self.cpu_vram[mirror_down_addr as usize];
-                trace!(
-                    "RAM READ: {:04X} => {:04X} ({:02X})",
-                    addr,
-                    mirror_down_addr,
-                    v
-                );
+                // trace!(
+                //     "RAM READ: {:04X} => {:04X} ({:02X})",
+                //     addr,
+                //     mirror_down_addr,
+                //     v
+                // );
                 v
             }
             // 0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 | 0x4014 => {
@@ -135,12 +135,12 @@ impl Mem for Bus<'_> {
             RAM..=RAM_MIRRORS_END => {
                 let mirror_down_addr = addr & 0b_0000_0111_1111_1111;
                 self.cpu_vram[mirror_down_addr as usize] = data;
-                trace!(
-                    "RAM WRITE: {:04X} => {:04X} ({:02X})",
-                    addr,
-                    mirror_down_addr,
-                    data
-                );
+                // trace!(
+                //     "RAM WRITE: {:04X} => {:04X} ({:02X})",
+                //     addr,
+                //     mirror_down_addr,
+                //     data
+                // );
             }
             0x2000 => {
                 self.ppu.write_to_ctrl(data);
@@ -189,7 +189,7 @@ impl Mem for Bus<'_> {
                 //   APUフレームカウンター
                 //   https://www.nesdev.org/wiki/APU_Frame_Counter
                 self.apu.write_frame_counter(data);
-                info!("WRITE ACCESS 0x4017. {:02X}", data);
+                // info!("WRITE ACCESS 0x4017. {:02X}", data);
             }
             0x4014 => {
                 // $XX を書き込むと、256 バイトのデータが CPU ページ $XX00 ～ $XXFF から内部 PPU OAM にアップロードされます。このページは通常、内部 RAM (通常は $0200 ～ $02FF) にありますが、カートリッジ RAM または ROM も使用できます。

@@ -1,6 +1,7 @@
 use log::{debug, info, trace};
 
 use crate::opscodes::{call, CPU_OPS_CODES};
+use crate::MAPPER;
 
 use crate::bus::{Bus, Mem};
 
@@ -110,6 +111,7 @@ impl<'a> CPU<'a> {
             stack_pointer: 0xFD, // FIXME あってる？
             // memory: [0x00; 0x10000],
             bus: bus,
+            cycles: 0, // 7,
             add_cycles: 0,
             current_op: None,
         }
@@ -262,6 +264,10 @@ impl<'a> CPU<'a> {
             if apu_irq {
                 self.apu_irq();
             }
+            // if MAPPER.lock().unwrap().irq() {
+            //     self.apu_irq();
+            // }
+
             let opscode = self.mem_read(self.program_counter);
             self.program_counter += 1;
 
@@ -304,7 +310,7 @@ impl<'a> CPU<'a> {
     }
 
     fn interrupt_nmi(&mut self) {
-        debug!("** INTERRUPT_NMI **");
+        debug!("** INTERRUPT_NMI ** [{:04X}]", self.mem_read_u16(0xFFFA));
 
         self._push_u16(self.program_counter);
         let mut status = self.status;
@@ -321,7 +327,6 @@ impl<'a> CPU<'a> {
         if self.status & FLAG_INTERRRUPT != 0 {
             return;
         }
-        info!("** APU IRQ **");
 
         self._push_u16(self.program_counter);
         let mut status = self.status;
@@ -332,6 +337,22 @@ impl<'a> CPU<'a> {
         self.status = self.status | FLAG_INTERRRUPT;
         self.bus.tick(2);
         self.program_counter = self.mem_read_u16(0xFFFE);
+    }
+
+    fn _irq(&mut self, jump_addr: u16) {
+        if self.status & FLAG_INTERRRUPT != 0 {
+            return;
+        }
+
+        self._push_u16(self.program_counter);
+        let mut status = self.status;
+        status = status & !FLAG_BREAK;
+        status = status | FLAG_BREAK2;
+        self._push(self.status);
+
+        self.status = self.status | FLAG_INTERRRUPT;
+        self.bus.tick(2);
+        self.program_counter = self.mem_read_u16(jump_addr);
     }
 
     fn find_ops(&mut self, opscode: u8) -> Option<OpCode> {
@@ -590,7 +611,7 @@ impl<'a> CPU<'a> {
 
     pub fn _push(&mut self, value: u8) {
         let addr = 0x0100 + self.stack_pointer as u16;
-        trace!("STACK PUSH: {:04X} => {:02X}", self.stack_pointer, value);
+        // trace!("STACK PUSH: {:04X} => {:02X}", self.stack_pointer, value);
         self.mem_write(addr, value);
         self.stack_pointer = self.stack_pointer.wrapping_sub(1);
     }
@@ -598,7 +619,7 @@ impl<'a> CPU<'a> {
     pub fn _pop(&mut self) -> u8 {
         self.stack_pointer = self.stack_pointer.wrapping_add(1);
         let addr = 0x0100 + self.stack_pointer as u16;
-        trace!("STACK POP: {:02X}", self.stack_pointer);
+        // trace!("STACK POP: {:02X}", self.stack_pointer);
         self.mem_read(addr)
     }
 
@@ -991,7 +1012,8 @@ pub fn trace(cpu: &mut CPU) -> String {
     unsafe { IN_TRACE = true };
 
     let program_counter = cpu.program_counter - 1;
-    let bank: Option<u8> = None; // MAPPER.lock().unwrap().prg_bank(program_counter);
+    let bank: Option<usize> = None;
+    // MAPPER.lock().unwrap().prg_bank(program_counter);
     let pc = match bank {
         Some(b) => format!("{:02X}:{:<04X}", b, program_counter),
         None => format!("{:<04X}", program_counter),
@@ -1008,22 +1030,22 @@ pub fn trace(cpu: &mut CPU) -> String {
     let memacc = memory_access(cpu, &ops, &args);
     let status = cpu2str(cpu);
 
-    // let log = format!(
-    //     "{:<6}{:<9}{:<33}{}",
-    //     pc,
-    //     bin,
-    //     vec![asm, memacc].join(" "),
-    //     status
-    // );
-
-    // trace!("{}", log);
-
     unsafe { IN_TRACE = false };
-    // A:00 X:00 Y:00 S:FD   $8000: 78       SEI
+
+    // for FCEUX
     let mut offset_space = String::from("");
     for _ in 0..(0xFF - cpu.stack_pointer) {
         offset_space = offset_space + " ";
     }
+    // trace!(
+    //     "c{:<12}{:<20}{}${:}: {:<8} {}",
+    //     cpu.cycles,
+    //     status,
+    //     offset_space,
+    //     pc,
+    //     bin,
+    //     vec![asm, memacc].join(" ").trim().to_string()
+    // );
     trace!(
         "{:<20}{}${:}: {:<8} {}",
         status,
@@ -1032,6 +1054,19 @@ pub fn trace(cpu: &mut CPU) -> String {
         bin,
         vec![asm, memacc].join(" ").trim().to_string()
     );
+
+    // // for NESTEST.log
+    // trace!(
+    //     "{:<6}{:<9}{:<33}{} PPU:{:>3},{:>3} CYC:{}",
+    //     pc,
+    //     bin,
+    //     vec![asm, memacc].join(" "),
+    //     status,
+    //     cpu.bus.ppu.scanline,
+    //     cpu.bus.ppu.cycles,
+    //     cpu.cycles
+    // );
+
     // log
     format!("")
 }
@@ -1142,23 +1177,27 @@ fn memory_access(cpu: &mut CPU, ops: &OpCode, args: &Vec<u8>) -> String {
     match ops.addressing_mode {
         AddressingMode::ZeroPage => {
             let value = cpu.mem_read(args[0] as u16);
+            // format!("= {:<02X}", value)
             format!("= #${:<02X}", value)
         }
         AddressingMode::ZeroPage_X => {
             let addr = args[0].wrapping_add(cpu.register_x) as u16;
             let value = cpu.mem_read(addr);
-            format!("@ {:<02X} = {:<02X}", addr, value)
+            // format!("@ {:<02X} = {:<02X}", addr, value)
+            format!("@ ${:<04X} = #${:<02X}", addr, value)
         }
         AddressingMode::ZeroPage_Y => {
             let addr = args[0].wrapping_add(cpu.register_y) as u16;
             let value = cpu.mem_read(addr);
-            format!("@ {:<02X} = {:<02X}", addr, value)
+            // format!("@ {:<02X} = {:<02X}", addr, value)
+            format!("@ ${:<04X} = #${:<02X}", addr, value)
         }
         AddressingMode::Absolute => {
             let hi = args[1] as u16;
             let lo = args[0] as u16;
             let addr = hi << 8 | lo;
             let value = cpu.mem_read(addr);
+            // format!("= {:<02X}", value)
             format!("= #${:<02X}", value)
         }
         AddressingMode::Absolute_X => {
@@ -1167,7 +1206,8 @@ fn memory_access(cpu: &mut CPU, ops: &OpCode, args: &Vec<u8>) -> String {
             let base = hi << 8 | lo;
             let addr = base.wrapping_add(cpu.register_x as u16);
             let value = cpu.mem_read(addr);
-            format!("@ {:<04X} = {:<02X}", addr, value)
+            // format!("@ {:<04X} = {:<02X}", addr, value)
+            format!("@ ${:<04X} = #${:<02X}", addr, value)
         }
         AddressingMode::Absolute_Y => {
             let hi = args[1] as u16;
@@ -1202,6 +1242,10 @@ fn cpu2str(cpu: &CPU) -> String {
         "A:{:<02X} X:{:<02X} Y:{:<02X} S:{:<02X}",
         cpu.register_a, cpu.register_x, cpu.register_y, cpu.stack_pointer,
     )
+    // format!(
+    //     "A:{:<02X} X:{:<02X} Y:{:<02X} P:{:<02X} SP:{:<02X}",
+    //     cpu.register_a, cpu.register_x, cpu.register_y, cpu.status, cpu.stack_pointer,
+    // )
 }
 
 #[cfg(test)]

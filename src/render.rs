@@ -29,7 +29,10 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
     let scroll_x = (ppu.scroll.scroll_x) as usize;
     let scroll_y = (ppu.scroll.scroll_y) as usize;
 
-    let (main_name_table, second_name_table) = match (&ppu.mirroring, ppu.ctrl.nametable_addr()) {
+    let (main_name_table, second_name_table) = match (
+        MAPPER.lock().unwrap().mirroring(),
+        ppu.ctrl.nametable_addr(),
+    ) {
         (Mirroring::VERTICAL, 0x2000) | (Mirroring::VERTICAL, 0x2800) => {
             (&ppu.vram[0x000..0x400], &ppu.vram[0x400..0x800])
         }
@@ -43,7 +46,10 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
             (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
         }
         (_, _) => {
-            panic!("Not supported mirroring type {:?}", ppu.mirroring);
+            panic!(
+                "Not supported mirroring type {:?}",
+                MAPPER.lock().unwrap().mirroring()
+            );
         }
     };
 
@@ -105,6 +111,7 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
 
         let bank: u16 = ppu.ctrl.sprite_pattern_addr();
 
+        // MAPPER.lock().unwrap().scanline(tile_y);
         let start = MAPPER
             .lock()
             .unwrap()
@@ -120,9 +127,9 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
                 lower = lower >> 1;
                 let rgb = match value {
                     0 => continue 'ololo, // skip coloring the pixel
-                    1 => palette::SYSTEM_PALLETE[sprite_palette[1] as usize],
-                    2 => palette::SYSTEM_PALLETE[sprite_palette[2] as usize],
-                    3 => palette::SYSTEM_PALLETE[sprite_palette[3] as usize],
+                    1 => palette::SYSTEM_PALLETE[(sprite_palette[1] & 0x3F) as usize],
+                    2 => palette::SYSTEM_PALLETE[(sprite_palette[2] & 0x3F) as usize],
+                    3 => palette::SYSTEM_PALLETE[(sprite_palette[3] & 0x3F) as usize],
                     _ => panic!("can't be"),
                 };
 
@@ -185,6 +192,7 @@ fn render_name_table(
         let tile_column = i % 32;
         let tile_row = i / 32;
         let tile_idx = name_table[i] as u16;
+        // MAPPER.lock().unwrap().scanline(tile_row * 8);
         let start = MAPPER
             .lock()
             .unwrap()
@@ -201,10 +209,10 @@ fn render_name_table(
                 upper = upper >> 1;
                 lower = lower >> 1;
                 let rgb = match value {
-                    0 => palette::SYSTEM_PALLETE[palette[0] as usize],
-                    1 => palette::SYSTEM_PALLETE[palette[1] as usize],
-                    2 => palette::SYSTEM_PALLETE[palette[2] as usize],
-                    3 => palette::SYSTEM_PALLETE[palette[3] as usize],
+                    0 => palette::SYSTEM_PALLETE[(palette[0] & 0x3F) as usize],
+                    1 => palette::SYSTEM_PALLETE[(palette[1] & 0x3F) as usize],
+                    2 => palette::SYSTEM_PALLETE[(palette[2] & 0x3F) as usize],
+                    3 => palette::SYSTEM_PALLETE[(palette[3] & 0x3F) as usize],
                     _ => panic!("can't be"),
                 };
 

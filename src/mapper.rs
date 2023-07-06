@@ -4,7 +4,7 @@
 
 use log::{debug, info, trace, warn};
 
-use crate::rom::Rom;
+use crate::rom::{Mirroring, Rom};
 
 pub fn mapper_from_rom(rom: &Rom) -> Box<dyn Mapper> {
     match rom.mapper {
@@ -32,6 +32,10 @@ impl Mapper0 {
             prg_rom_size: prg_rom_size,
         }
     }
+
+    pub fn mirroring(&self) -> Mirroring {
+        Mirroring::VERTICAL // TODO
+    }
 }
 
 impl Mapper for Mapper0 {
@@ -51,7 +55,7 @@ impl Mapper for Mapper0 {
 
 #[derive(Debug, Clone, PartialEq)]
 #[allow(non_camel_case_types)]
-enum Mirroring {
+enum Mapper1Mirroring {
     Lower,      // 0: 1 画面、下位バンク
     Upper,      // 1: 1 画面、上位バンク
     Vertical,   // 2: 垂直
@@ -81,7 +85,7 @@ pub struct Mapper1 {
 
     // $8000-$9FFF
     // control: u8,
-    mirroring: Mirroring,
+    mirroring: Mapper1Mirroring,
     prg_rom_bank_mode: PrgRomBankMode,
     chr_rom_bank_mode: ChrRomBankMode,
 
@@ -105,7 +109,7 @@ impl Mapper1 {
             prg_rom_size: prg_rom_size,
             shift_register: 0x10,
             write_count: 0,
-            mirroring: Mirroring::Lower,
+            mirroring: Mapper1Mirroring::Lower,
             prg_rom_bank_mode: PrgRomBankMode::LastBankIsC,
             chr_rom_bank_mode: ChrRomBankMode::Switch8Kb,
             chr_bank0: 0,
@@ -119,6 +123,32 @@ impl Mapper1 {
         self.shift_register = 0x10;
         self.write_count = 0;
     }
+
+    pub fn prg_bank(&self, addr: u16) -> Option<usize> {
+        let mut num = self.prg_bank as usize & 0x0F;
+
+        let bank_len = 16 * 1024;
+        let mut last_bank = self.prg_rom_size / bank_len - 1;
+        if self.prg_upper != 0x10 {
+            last_bank = last_bank & 0x0F;
+        }
+        if self.prg_upper == 0x10 {
+            num = num | 0x10;
+        }
+        match addr {
+            0x8000..=0xBFFF => Some(num),
+            0xC000..=0xFFFF => Some(last_bank),
+            _ => None,
+        }
+    }
+
+    pub fn mirroring(&self) -> Mirroring {
+        match self.mirroring {
+            Mapper1Mirroring::Vertical => Mirroring::VERTICAL,
+            Mapper1Mirroring::Horizontal => Mirroring::HORIZONTAL,
+            _ => panic!("this mirroring mode is not supported. {:?}", self.mirroring),
+        }
+    }
 }
 
 impl Mapper for Mapper1 {
@@ -131,10 +161,10 @@ impl Mapper for Mapper1 {
         self.shift_register = self.shift_register >> 1;
         self.shift_register = (self.shift_register | ((data & 0x01) << 4)) & 0x1F;
         self.write_count += 1;
-        info!(
-            "MAPPER1: W:{:04X}, CNT:{} {:02X}",
-            addr, self.write_count, data
-        );
+        // info!(
+        //     "MAPPER1: W:{:04X}, CNT:{} {:02X}",
+        //     addr, self.write_count, data
+        // );
 
         if self.write_count == 5 {
             let v = self.shift_register;
@@ -152,21 +182,21 @@ impl Mapper for Mapper1 {
                         _ => panic!("can't be"),
                     };
                     self.mirroring = match v & 0x03 {
-                        0 => Mirroring::Lower,
-                        1 => Mirroring::Upper,
-                        2 => Mirroring::Vertical,
-                        3 => Mirroring::Horizontal,
+                        0 => Mapper1Mirroring::Lower,
+                        1 => Mapper1Mirroring::Upper,
+                        2 => Mapper1Mirroring::Vertical,
+                        3 => Mapper1Mirroring::Horizontal,
                         _ => panic!("can't be"),
                     };
                     info!("MAPPER1: W:{:04X}, control: mirroring={:?}, prg_rom_bank_mode={:?}, chr_rom_bank_mode={:?}", addr, self.mirroring, self.prg_rom_bank_mode, self.chr_rom_bank_mode);
                 }
                 // 0xA000..=0xBFFF => {
                 //     self.chr_bank0 = v & 0x1F;
-                //     info!("MAPPER1: W:{:04X}, CHR_BANK0={:02X}", addr, v & 0x1F)
+                //     info!("MAPPER1: W:{:04X}, CHR0_BANK={:02X}", addr, v & 0x1F)
                 // }
                 // 0xC000..=0xDFFF => {
                 //     self.chr_bank1 = v & 0x1F;
-                //     info!("MAPPER1: W:{:04X}, CHR_BANK1={:02X}", addr, v & 0x1F)
+                //     info!("MAPPER1: W:{:04X}, CHR1_BANK={:02X}", addr, v & 0x1F)
                 // }
                 0xA000..=0xBFFF => {
                     // 4bit0
@@ -186,7 +216,8 @@ impl Mapper for Mapper1 {
                     // ||| +- PPU $1000 で 4 KB CHR RAM バンクを選択 (8 KB モードでは無視)
                     // |++--- 8 KB PRG RAM バンクを選択 (8 KB モードでは無視)
                     // +----- 256 KB PRG ROM バンクを選択 ( 8 KB モードでは無視されます)
-                    self.prg_upper = v & 0x10;
+                    // self.prg_upper = 0x10;
+                    info!("WRITE {:04X} => {:02X}", addr, v)
                 }
                 0xE000..=0xFFFF => {
                     self.prg_bank = v & 0x1F;
@@ -199,23 +230,22 @@ impl Mapper for Mapper1 {
     }
 
     fn mirror_prg_rom_addr(&self, addr: usize) -> usize {
-        let mut num = self.prg_bank as usize & 0x0F;
+        let mut num = self.prg_bank as usize & 0x1F;
 
         let bank_len = 16 * 1024;
         let mut last_bank = self.prg_rom_size / bank_len - 1;
-        let upper = self.prg_upper == 0x10;
-        if !upper {
+        if self.prg_upper != 0x10 {
             last_bank = last_bank & 0x0F;
         }
-        if upper {
+        if self.prg_upper == 0x10 {
             num = num | 0x10;
         }
 
         match self.prg_rom_bank_mode {
-            PrgRomBankMode::IgnoreLowerBit => (num & 0x0E) * bank_len,
+            PrgRomBankMode::IgnoreLowerBit => (num & 0x1E) * bank_len,
             PrgRomBankMode::FirstBankIs8 => match addr {
                 0x8000..=0xBFFF => addr,
-                0xC000..=0xFFFF => num * bank_len,
+                0xC000..=0xFFFF => addr - bank_len + num * bank_len,
                 _ => panic!("can't be"),
             },
             PrgRomBankMode::LastBankIsC => match addr {
@@ -299,9 +329,18 @@ pub struct Mapper4 {
     bank_data: [u8; 8],
     mirroring: u8,
     prg_ram_protect: u8, // 実装しなくて良いらしい
+
+    irq_latch_wrote: bool,
     irq_latch: u8,
     irq_reload: bool,
+
+    irq_latch_inner: u8,
+    irq_counter: usize,
     irq_enable: bool,
+
+    irq: bool,
+
+    scanline: usize,
 }
 
 impl Mapper4 {
@@ -312,9 +351,35 @@ impl Mapper4 {
             bank_data: [0; 8],
             mirroring: 0,
             prg_ram_protect: 0,
+            irq_latch_wrote: false,
             irq_latch: 0,
             irq_reload: false,
+            irq_counter: 0,
+            irq_latch_inner: 0,
             irq_enable: false,
+            irq: false,
+            scanline: 0,
+        }
+    }
+
+    pub fn mirroring(&self) -> Mirroring {
+        match self.mirroring & 0x01 {
+            0 => Mirroring::VERTICAL,
+            1 => Mirroring::HORIZONTAL,
+            _ => panic!("can't be"),
+        }
+    }
+
+    pub fn irq(&mut self) -> bool {
+        return self.irq_enable && self.irq_counter == 0;
+    }
+
+    pub fn scanline(&mut self, scanline: usize) {
+        if self.irq_counter == 0 || self.irq_reload {
+            self.irq_counter = self.irq_latch as usize;
+            self.irq_reload = false
+        } else {
+            self.irq_counter -= 1;
         }
     }
 }
@@ -324,14 +389,17 @@ impl Mapper for Mapper4 {
         match addr {
             0x8000..=0x9FFF => {
                 if (addr & 0x01) == 0 {
-                    info!("MAPPER4 bank_select: {:02X}", data);
+                    // info!("MAPPER4 bank_select: {:02X} {}", data, self.scanline);
                     self.bank_select = data;
                 } else {
-                    info!(
-                        "MAPPER4 bank_data({}) {:02X}",
-                        self.bank_select & 0x07,
-                        data
-                    );
+                    if self.bank_select & 0x07 <= 5 {
+                        info!(
+                            "MAPPER4 bank_data({}) {:02X}  {}",
+                            self.bank_select & 0x07,
+                            data,
+                            self.scanline
+                        );
+                    }
                     self.bank_data[(self.bank_select & 0x07) as usize] = data;
                 }
             }
@@ -345,6 +413,7 @@ impl Mapper for Mapper4 {
             0xC000..=0xDFFF => {
                 if (addr & 0x01) == 0 {
                     self.irq_latch = data;
+                    self.irq_latch_wrote = true;
                 } else {
                     self.irq_reload = true;
                 }
@@ -406,7 +475,7 @@ impl Mapper for Mapper4 {
     }
 
     fn mirror_chr_rom_addr(&mut self, addr: usize) -> usize {
-        debug!("MAPPER4 mirror_chr_rom_addr => {:04X}", addr);
+        // debug!("MAPPER4 mirror_chr_rom_addr => {:04X}", addr);
         let d7 = self.bank_select & 0x80;
         let bank_len: usize = 1 * 1024;
         let r0 = (self.bank_data[0] & 0xFE) as usize;
@@ -419,33 +488,33 @@ impl Mapper for Mapper4 {
         if d7 == 0 {
             match addr {
                 // R0 (2KB)
-                0x0000..=0x07FF => addr - (bank_len * 0) + r0 * bank_len,
+                0x0000..=0x07FF => addr - 0x0000 + r0 * bank_len,
                 // R1 (2KB)
-                0x0800..=0x0FFF => addr - (bank_len * 2) + r1 * bank_len,
+                0x0800..=0x0FFF => addr - 0x0800 + r1 * bank_len,
                 // R2
-                0x1000..=0x13FF => addr - (bank_len * 4) + r2 * bank_len,
+                0x1000..=0x13FF => addr - 0x1000 + r2 * bank_len,
                 // R3
-                0x1400..=0x17FF => addr - (bank_len * 5) + r3 * bank_len,
+                0x1400..=0x17FF => addr - 0x1400 + r3 * bank_len,
                 // R4
-                0x1800..=0x1BFF => addr - (bank_len * 6) + r4 * bank_len,
+                0x1800..=0x1BFF => addr - 0x1800 + r4 * bank_len,
                 // R5
-                0x1C00..=0x1FFF => addr - (bank_len * 7) + r5 * bank_len,
+                0x1C00..=0x1FFF => addr - 0x1C00 + r5 * bank_len,
                 _ => panic!("can't be"),
             }
         } else {
             match addr {
                 // R2
-                0x0000..=0x03FF => addr - (bank_len * 0) + r2 * bank_len,
+                0x0000..=0x03FF => addr - 0x0000 + r2 * bank_len,
                 // R3
-                0x0400..=0x07FF => addr - (bank_len * 1) + r3 * bank_len,
+                0x0400..=0x07FF => addr - 0x0400 + r3 * bank_len,
                 // R4
-                0x0800..=0x0BFF => addr - (bank_len * 2) + r4 * bank_len,
+                0x0800..=0x0BFF => addr - 0x0800 + r4 * bank_len,
                 // R5
-                0x0C00..=0x0FFF => addr - (bank_len * 3) + r5 * bank_len,
+                0x0C00..=0x0FFF => addr - 0x0C00 + r5 * bank_len,
                 // R0 (2KB)
-                0x1000..=0x17FF => addr - (bank_len * 4) + r0 * bank_len,
+                0x1000..=0x17FF => addr - 0x1000 + r0 * bank_len,
                 // R1 (2KB)
-                0x1800..=0x1FFF => addr - (bank_len * 6) + r1 * bank_len,
+                0x1800..=0x1FFF => addr - 0x1800 + r1 * bank_len,
                 _ => panic!("can't be"),
             }
         }
