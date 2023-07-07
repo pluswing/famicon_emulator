@@ -1,6 +1,6 @@
 use log::{debug, info, trace};
 
-const MASTER_VOLUME: f32 = 0.5;
+const MASTER_VOLUME: f32 = 0.4;
 
 pub struct NesAPU {
     ch1_register: Ch1Register,
@@ -141,7 +141,7 @@ impl NesAPU {
 
         self.ch3_sender
             .send(TriangleEvent::Note(TriangleNote {
-                frequency: hself.ch2_register.frequency,
+                frequency: self.ch2_register.frequency,
             }))
             .unwrap();
 
@@ -173,6 +173,14 @@ impl NesAPU {
                 is_long: is_long,
                 volume: volume,
             }))
+            .unwrap();
+
+        self.ch4_sender
+            .send(NoiseEvent::Envelope(Envelope::new(
+                self.ch4_register.volume,
+                self.ch4_register.envelope_flag,
+                !self.ch4_register.key_off_counter_flag,
+            )))
             .unwrap();
 
         self.ch4_sender

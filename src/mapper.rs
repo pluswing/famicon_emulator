@@ -1,3 +1,26 @@
+pub struct Mapper0 {
+    pub prg_rom: Vec<u8>,
+}
+
+impl Mapper0 {
+    pub fn new() -> Self {
+        Mapper0 { prg_rom: vec![] }
+    }
+
+    pub fn write(&mut self, addr: u16, data: u8) {
+        // 何もしない
+    }
+
+    pub fn read_prg_rom(&self, addr: u16) -> u8 {
+        let mut mirror_addr = addr - 0x8000;
+        if self.prg_rom.len() == 0x4000 && addr >= 0x4000 {
+            // mirror if needed
+            mirror_addr = mirror_addr % 0x4000;
+        }
+        self.prg_rom[mirror_addr as usize]
+    }
+}
+
 pub struct Mapper2 {
     pub prg_rom: Vec<u8>,
     bank_select: u8,

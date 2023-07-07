@@ -24,7 +24,7 @@ use cartridge::test::{alter_ego_rom, mario_rom, test_rom};
 use frame::{show_tile, Frame};
 use joypad::Joypad;
 use log::{debug, info, log_enabled, trace, Level};
-use mapper::Mapper2;
+use mapper::{Mapper0, Mapper2};
 use ppu::NesPPU;
 use rand::Rng;
 use sdl2::event::Event;
@@ -37,7 +37,7 @@ use std::io::Write;
 use std::sync::Mutex;
 
 lazy_static! {
-    pub static ref MAPPER: Mutex<Box<Mapper2>> = Mutex::new(Box::new(Mapper2::new()));
+    pub static ref MAPPER: Mutex<Box<Mapper0>> = Mutex::new(Box::new(Mapper0::new()));
 }
 
 fn main() {
@@ -82,7 +82,7 @@ fn main() {
     let rom = load_rom("rom/BombSweeper.nes");
     let rom = alter_ego_rom();
     let rom = load_rom("rom/Dragon Quest II - Akuryou no Kamigami (Japan).nes");
-    // let rom = mario_rom();
+    let rom = mario_rom();
 
     MAPPER.lock().unwrap().prg_rom = rom.prg_rom.clone();
 

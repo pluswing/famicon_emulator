@@ -313,13 +313,9 @@ impl<'a> CPU<'a> {
     }
 
     fn apu_irq(&mut self) {
-        info!("** APU_IRQ **");
-
         if self.status & FLAG_INTERRRUPT != 0 {
             return;
         }
-        info!("  => CALL");
-
         self._push_u16(self.program_counter);
         self._push(self.status);
         self.program_counter = self.mem_read_u16(0xFFFE);
