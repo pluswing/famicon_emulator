@@ -21,6 +21,56 @@ impl Mapper0 {
     }
 }
 
+pub struct Mapper1 {
+    pub prg_rom: Vec<u8>,
+    pub chr_com: Vec<u8>,
+
+    shift_register: u8,
+    shift_count: u8,
+
+    control: u8,
+    chr_bank0: u8,
+    chr_bank1: u8,
+    prg_bank: u8,
+}
+
+impl Mapper1 {
+    pub fn new() -> Self {
+        Mapper1 {
+            prg_rom: vec![],
+            chr_com: vec![],
+            shift_register: 0x10,
+            shift_count: 0,
+        }
+    }
+    pub fn write(&mut self, addr: u16, data: u8) {
+        if data & 0x80 != 0 {
+            self.reset()
+        }
+        self.shift_register = self.shift_register >> 1;
+        self.shift_register = self.shift_register | ((data & 0x01) << 5);
+        self.shift_count += 1;
+
+        if self.shift_count == 5 {
+            match addr {
+                0x8000..=0x9FFF => self.control = self.shift_register,
+                0xA000..=0xBFFF => self.chr_bank0 = self.shift_register,
+                0xC000..=0xDFFF => self.chr_bank1 = self.shift_register,
+                0xE000..=0xFFFF => self.prg_bank = self.shift_register,
+            }
+            self.reset();
+        }
+    }
+
+    fn reset(&mut self) {
+        self.shift_register = 0x10;
+        self.shift_count = 0;
+    }
+
+    pub fn read_prg_rom(&self, addr: u16) -> u8 {}
+    pub fn read_chr_rom(&self, addr: u16) -> u8 {}
+}
+
 pub struct Mapper2 {
     pub prg_rom: Vec<u8>,
     bank_select: u8,
