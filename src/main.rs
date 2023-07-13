@@ -24,7 +24,7 @@ use cartridge::test::{alter_ego_rom, mario_rom, test_rom};
 use frame::{show_tile, Frame};
 use joypad::Joypad;
 use log::{debug, info, log_enabled, trace, Level};
-use mapper::{Mapper0, Mapper2};
+use mapper::{Mapper0, Mapper1, Mapper2};
 use ppu::NesPPU;
 use rand::Rng;
 use sdl2::event::Event;
@@ -37,7 +37,7 @@ use std::io::Write;
 use std::sync::Mutex;
 
 lazy_static! {
-    pub static ref MAPPER: Mutex<Box<Mapper0>> = Mutex::new(Box::new(Mapper0::new()));
+    pub static ref MAPPER: Mutex<Box<Mapper1>> = Mutex::new(Box::new(Mapper1::new()));
 }
 
 fn main() {
@@ -83,17 +83,18 @@ fn main() {
     let rom = alter_ego_rom();
     let rom = load_rom("rom/Dragon Quest II - Akuryou no Kamigami (Japan).nes");
     let rom = mario_rom();
-
-    MAPPER.lock().unwrap().prg_rom = rom.prg_rom.clone();
+    let rom = load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes");
 
     info!(
         "ROM: mapper={}, mirroring={:?} chr_ram={}",
         rom.mapper, rom.screen_mirroring, rom.is_chr_ram
     );
 
+    MAPPER.lock().unwrap().rom = rom;
+
     let mut frame = Frame::new();
     let apu = NesAPU::new(&sdl_context);
-    let bus = Bus::new(rom, apu, move |ppu: &NesPPU, joypad1: &mut Joypad| {
+    let bus = Bus::new(apu, move |ppu: &NesPPU, joypad1: &mut Joypad| {
         render::render(ppu, &mut frame);
         texture.update(None, &frame.data, 256 * 3).unwrap();
 

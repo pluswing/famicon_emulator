@@ -1,6 +1,5 @@
 use crate::joypad::Joypad;
 use crate::ppu::NesPPU;
-use crate::rom::Rom;
 use crate::{apu::NesAPU, MAPPER};
 use log::{debug, error, info, log_enabled, trace, warn, Level};
 
@@ -17,14 +16,13 @@ pub struct Bus<'call> {
 }
 
 impl<'a> Bus<'a> {
-    pub fn new<'call, F>(rom: Rom, apu: NesAPU, gameloop_callback: F) -> Bus<'call>
+    pub fn new<'call, F>(apu: NesAPU, gameloop_callback: F) -> Bus<'call>
     where
         F: FnMut(&NesPPU, &mut Joypad) + 'call,
     {
-        let ppu = NesPPU::new(rom.chr_rom, rom.screen_mirroring, rom.is_chr_ram);
+        let ppu = NesPPU::new();
         Bus {
             cpu_vram: [0; 2048],
-            // prg_rom: rom.prg_rom,
             ppu: ppu,
             joypad1: Joypad::new(),
             joypad2: Joypad::new(),

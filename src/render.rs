@@ -1,9 +1,9 @@
 use log::{debug, info};
 
 use crate::frame::Frame;
-use crate::palette;
 use crate::ppu::NesPPU;
 use crate::rom::Mirroring;
+use crate::{palette, MAPPER};
 
 struct Rect {
     x1: usize,
@@ -27,8 +27,8 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
     // draw background
     let scroll_x = (ppu.scroll.scroll_x) as usize;
     let scroll_y = (ppu.scroll.scroll_y) as usize;
-
-    let (main_name_table, second_name_table) = match (&ppu.mirroring, ppu.ctrl.nametable_addr()) {
+    let mirroring = MAPPER.lock().unwrap().mirroring();
+    let (main_name_table, second_name_table) = match (&mirroring, ppu.ctrl.nametable_addr()) {
         (Mirroring::VERTICAL, 0x2000) | (Mirroring::VERTICAL, 0x2800) => {
             (&ppu.vram[0x000..0x400], &ppu.vram[0x400..0x800])
         }
@@ -42,7 +42,7 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
             (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
         }
         (_, _) => {
-            panic!("Not supported mirroring type {:?}", ppu.mirroring);
+            panic!("Not supported mirroring type {:?}", mirroring);
         }
     };
 
@@ -104,8 +104,11 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
 
         let bank: u16 = ppu.ctrl.sprite_pattern_addr();
 
-        let tile =
-            &ppu.chr_rom[(bank + tile_idx * 16) as usize..=(bank + tile_idx * 16 + 15) as usize];
+        let start = bank + tile_idx * 16;
+        let mut tile: [u8; 16] = [0; 16];
+        for i in 0..=15 {
+            tile[i] = MAPPER.lock().unwrap().read_chr_rom(start + i as u16)
+        }
 
         for y in 0..=7 {
             let mut upper = tile[y];
@@ -181,8 +184,12 @@ fn render_name_table(
         let tile_column = i % 32;
         let tile_row = i / 32;
         let tile_idx = name_table[i] as u16;
-        let tile =
-            &ppu.chr_rom[(bank + tile_idx * 16) as usize..=(bank + tile_idx * 16 + 15) as usize];
+
+        let start = bank + tile_idx * 16;
+        let mut tile: [u8; 16] = [0; 16];
+        for i in 0..=15 {
+            tile[i] = MAPPER.lock().unwrap().read_chr_rom(start + i as u16)
+        }
         let palette = bg_pallette(ppu, attribute_table, tile_column, tile_row);
 
         for y in 0..=7 {

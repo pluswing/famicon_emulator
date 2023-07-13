@@ -1,4 +1,4 @@
-use crate::rom::Mirroring;
+use crate::rom::{Mirroring, Rom};
 
 pub struct Mapper0 {
     pub prg_rom: Vec<u8>,
@@ -24,8 +24,7 @@ impl Mapper0 {
 }
 
 pub struct Mapper1 {
-    pub prg_rom: Vec<u8>,
-    pub chr_rom: Vec<u8>,
+    pub rom: Rom,
 
     shift_register: u8,
     shift_count: u8,
@@ -39,8 +38,7 @@ pub struct Mapper1 {
 impl Mapper1 {
     pub fn new() -> Self {
         Mapper1 {
-            prg_rom: vec![],
-            chr_rom: vec![],
+            rom: Rom::empty(),
             shift_register: 0x10,
             shift_count: 0,
 
@@ -64,6 +62,7 @@ impl Mapper1 {
                 0xA000..=0xBFFF => self.chr_bank0 = self.shift_register,
                 0xC000..=0xDFFF => self.chr_bank1 = self.shift_register,
                 0xE000..=0xFFFF => self.prg_bank = self.shift_register,
+                _ => panic!("can't be"),
             }
             self.reset();
         }
@@ -84,22 +83,24 @@ impl Mapper1 {
 
     pub fn read_prg_rom(&self, addr: u16) -> u8 {
         let bank_len = 16 * 1024 as usize;
-        let bank_max = self.prg_rom.len() / bank_len;
+        let bank_max = self.rom.prg_rom.len() / bank_len;
 
         match (self.control & 0x0C) >> 2 {
             0 | 1 => {
                 // バンク番号の下位ビットを無視して、32 KB を $8000 に切り替えます。
                 let bank = self.prg_bank & 0x1E;
-                self.prg_rom[(addr as usize - 0x8000 + bank_len * bank as usize) as usize]
+                self.rom.prg_rom[(addr as usize - 0x8000 + bank_len * bank as usize) as usize]
             }
             2 => {
                 // 最初のバンクを $8000 に固定し、16 KB バンクを $C000 に切り替えます。
                 match addr {
-                    0x8000..=0xBFFF => self.prg_rom[addr as usize - 0x8000],
+                    0x8000..=0xBFFF => self.rom.prg_rom[addr as usize - 0x8000],
                     0xC000..=0xFFFF => {
                         let bank = self.prg_bank & 0x1F;
-                        self.prg_rom[(addr as usize - 0xC000 + bank_len * bank as usize) as usize]
+                        self.rom.prg_rom
+                            [(addr as usize - 0xC000 + bank_len * bank as usize) as usize]
                     }
+                    _ => panic!("can't be"),
                 }
             }
             3 => {
@@ -107,13 +108,16 @@ impl Mapper1 {
                 match addr {
                     0x8000..=0xBFFF => {
                         let bank = self.prg_bank & 0x1F;
-                        self.prg_rom[(addr as usize - 0x8000 + bank_len * bank as usize) as usize]
+                        self.rom.prg_rom
+                            [(addr as usize - 0x8000 + bank_len * bank as usize) as usize]
                     }
                     0xC000..=0xFFFF => {
-                        self.prg_rom[addr as usize - 0xC000 + (bank_len * bank_max - 1)]
+                        self.rom.prg_rom[addr as usize - 0xC000 + bank_len * (bank_max - 1)]
                     }
+                    _ => panic!("can't be"),
                 }
             }
+            _ => panic!("can't be"),
         }
     }
     pub fn read_chr_rom(&self, addr: u16) -> u8 {
@@ -122,21 +126,23 @@ impl Mapper1 {
             0 => {
                 // 一度に 8 KB を切り替え
                 let bank = self.chr_bank0 & 0x1F;
-                self.chr_rom[addr as usize + bank_len * bank as usize]
+                self.rom.chr_rom[addr as usize + bank_len * bank as usize]
             }
             1 => {
                 // 2 つの別々の 4 KB バンクを切り替え
                 match addr {
                     0x0000..=0x0FFF => {
                         let bank = self.chr_bank0 & 0x1F;
-                        self.chr_rom[addr as usize + bank_len * bank as usize]
+                        self.rom.chr_rom[addr as usize + bank_len * bank as usize]
                     }
                     0x1000..=0x1FFF => {
                         let bank = self.chr_bank1 & 0x1F;
-                        self.chr_rom[addr as usize - 0x1000 + bank_len * bank as usize]
+                        self.rom.chr_rom[addr as usize - 0x1000 + bank_len * bank as usize]
                     }
+                    _ => panic!("can't be"),
                 }
             }
+            _ => panic!("can't be"),
         }
     }
 }

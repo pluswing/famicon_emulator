@@ -1,13 +1,9 @@
 use bitflags::bitflags;
 use log::{debug, info, trace};
 
-use crate::{cpu::IN_TRACE, rom::Mirroring};
+use crate::{cpu::IN_TRACE, rom::Mirroring, MAPPER};
 
 pub struct NesPPU {
-    pub chr_rom: Vec<u8>,
-    pub mirroring: Mirroring,
-    pub is_chr_ram: bool,
-
     pub palette_table: [u8; 32],
     pub vram: [u8; 2048],
 
@@ -40,11 +36,8 @@ pub struct NesPPU {
 }
 
 impl NesPPU {
-    pub fn new(chr_rom: Vec<u8>, mirroring: Mirroring, is_chr_ram: bool) -> Self {
+    pub fn new() -> Self {
         NesPPU {
-            chr_rom: chr_rom,
-            mirroring: mirroring,
-            is_chr_ram: is_chr_ram,
             vram: [0; 2048],
             oam_data: [0; 64 * 4],
             oam_addr: 0,
@@ -79,8 +72,9 @@ impl NesPPU {
             0x0000..=0x1FFF => {
                 // FIXME
                 debug!("write CHR_ROM {:04X} => {:02X}", addr, value);
-                if self.is_chr_ram {
-                    self.chr_rom[addr as usize] = value;
+                if MAPPER.lock().unwrap().rom.is_chr_ram {
+                    // TODO
+                    // self.chr_rom[addr as usize] = value;
                 }
             }
             0x2000..=0x2FFF => {
@@ -247,7 +241,8 @@ impl NesPPU {
                     self.internal_data_buf
                 } else {
                     let result = self.internal_data_buf;
-                    self.internal_data_buf = self.chr_rom[addr as usize];
+
+                    self.internal_data_buf = MAPPER.lock().unwrap().read_chr_rom(addr);
                     result
                 }
             }
@@ -286,7 +281,8 @@ impl NesPPU {
         let mirrored_vram = addr & 0b10_1111_1111_1111;
         let vram_index = mirrored_vram - 0x2000;
         let name_table = vram_index / 0x400;
-        match (&self.mirroring, name_table) {
+        let mirroring = MAPPER.lock().unwrap().mirroring();
+        match (&mirroring, name_table) {
             (Mirroring::VERTICAL, 2) => vram_index - 0x800,
             (Mirroring::VERTICAL, 3) => vram_index - 0x800,
             (Mirroring::HORIZONTAL, 2) => vram_index - 0x400,
