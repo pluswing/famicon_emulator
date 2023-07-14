@@ -25,6 +25,7 @@ impl Mapper0 {
 
 pub struct Mapper1 {
     pub rom: Rom,
+    save_ram: [u8; 8192],
 
     shift_register: u8,
     shift_count: u8,
@@ -39,6 +40,7 @@ impl Mapper1 {
     pub fn new() -> Self {
         Mapper1 {
             rom: Rom::empty(),
+            save_ram: [0xFF; 8192],
             shift_register: 0x10,
             shift_count: 0,
 
@@ -120,6 +122,7 @@ impl Mapper1 {
             _ => panic!("can't be"),
         }
     }
+
     pub fn read_chr_rom(&self, addr: u16) -> u8 {
         let bank_len = 4 * 1024 as usize;
         match (self.control & 0x10) >> 4 {
@@ -144,6 +147,14 @@ impl Mapper1 {
             }
             _ => panic!("can't be"),
         }
+    }
+
+    pub fn read_save_ram(&self, addr: u16) -> u8 {
+        self.save_ram[addr as usize - 0x6000]
+    }
+
+    pub fn write_save_ram(&mut self, addr: u16, data: u8) {
+        self.save_ram[addr as usize - 0x6000] = data;
     }
 }
 

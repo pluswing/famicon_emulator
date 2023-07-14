@@ -89,10 +89,12 @@ impl Mem for Bus<'_> {
                 );
                 v
             }
-            0x2000 | 0x2001 | 0x2003 | 0x2005 | 0x2006 | 0x4014 => {
+            0x2003 | 0x2005 | 0x2006 | 0x4014 => {
                 warn!("Attempt to read from write-only PPU address {:X}", addr);
                 0
             }
+            0x2000 => self.ppu.read_ctrl(),
+            0x2001 => self.ppu.read_mask(),
             0x2002 => self.ppu.read_status(),
             0x2004 => self.ppu.read_oam_data(),
             0x2007 => self.ppu.read_data(),
@@ -108,10 +110,8 @@ impl Mem for Bus<'_> {
                 // self.joypad2.read()
                 0
             }
-            PRG_ROM..=PRG_ROM_END => {
-                MAPPER.lock().unwrap().read_prg_rom(addr)
-                // self.read_prg_rom(addr)
-            }
+            0x6000..=0x7FFF => MAPPER.lock().unwrap().read_save_ram(addr),
+            PRG_ROM..=PRG_ROM_END => MAPPER.lock().unwrap().read_prg_rom(addr),
             _ => {
                 warn!("Ignoreing mem access at {:X}", addr);
                 0
@@ -194,6 +194,7 @@ impl Mem for Bus<'_> {
                     self.ppu.tick(1);
                 }
             }
+            0x6000..=0x7FFF => MAPPER.lock().unwrap().write_save_ram(addr, data),
             PRG_ROM..=PRG_ROM_END => {
                 MAPPER.lock().unwrap().write(addr, data);
                 // warn!(

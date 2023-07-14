@@ -179,6 +179,10 @@ impl NesPPU {
         }
     }
 
+    pub fn read_ctrl(&self) -> u8 {
+        self.ctrl.bits()
+    }
+
     pub fn read_status(&mut self) -> u8 {
         // スクロール ($2005)  PPUSTATUSを読み取ってアドレス ラッチをリセットした後
         if unsafe { IN_TRACE } {
@@ -198,6 +202,10 @@ impl NesPPU {
 
     pub fn write_to_mask(&mut self, value: u8) {
         self.mask.update(value);
+    }
+
+    pub fn read_mask(&mut self) -> u8 {
+        self.mask.bits()
     }
 
     pub fn write_to_oam_addr(&mut self, value: u8) {
