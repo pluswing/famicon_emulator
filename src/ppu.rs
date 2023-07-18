@@ -73,8 +73,7 @@ impl NesPPU {
                 // FIXME
                 debug!("write CHR_ROM {:04X} => {:02X}", addr, value);
                 if MAPPER.lock().unwrap().rom.is_chr_ram {
-                    // TODO
-                    // self.chr_rom[addr as usize] = value;
+                    MAPPER.lock().unwrap().write_chr_rom(addr, value);
                 }
             }
             0x2000..=0x2FFF => {
@@ -179,12 +178,20 @@ impl NesPPU {
         }
     }
 
+    pub fn read_ctrl(&self) -> u8 {
+        self.ctrl.bits()
+    }
+
+    pub fn read_mask(&self) -> u8 {
+        self.mask.bits()
+    }
+
     pub fn read_status(&mut self) -> u8 {
-        // スクロール ($2005)  PPUSTATUSを読み取ってアドレス ラッチをリセットした後
         if unsafe { IN_TRACE } {
             self.status.bits()
         } else {
             self.scroll.reset();
+            self.addr.reset_latch();
             let bits = self.status.bits();
             self.status.reset_vblank_status();
             self.clear_nmi_interrupt = true;

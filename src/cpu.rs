@@ -725,13 +725,13 @@ impl<'a> CPU<'a> {
     }
 
     pub fn brk(&mut self, mode: &AddressingMode) {
-        // FLAG_INTERRRUPTが立っている場合は
-        if self.status & FLAG_INTERRRUPT != 0 {
+        // FLAG_BREAK が立っている場合は
+        if self.status & FLAG_BREAK != 0 {
             return;
         }
 
         // プログラム カウンターとプロセッサ ステータスがスタックにプッシュされ、
-        self._push_u16(self.program_counter);
+        self._push_u16(self.program_counter + 1);
         self._push(self.status);
 
         // $FFFE/F の IRQ 割り込みベクトルが PC にロードされ、ステータスのブレーク フラグが 1 に設定されます。

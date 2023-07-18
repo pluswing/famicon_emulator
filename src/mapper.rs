@@ -25,6 +25,7 @@ impl Mapper0 {
 
 pub struct Mapper1 {
     pub rom: Rom,
+    prg_ram: [u8; 8192],
 
     shift_register: u8,
     shift_count: u8,
@@ -39,10 +40,11 @@ impl Mapper1 {
     pub fn new() -> Self {
         Mapper1 {
             rom: Rom::empty(),
+            prg_ram: [0xFF; 8192],
             shift_register: 0x10,
             shift_count: 0,
 
-            control: 0,
+            control: 0x0C,
             chr_bank0: 0,
             chr_bank1: 0,
             prg_bank: 0,
@@ -50,8 +52,10 @@ impl Mapper1 {
     }
     pub fn write(&mut self, addr: u16, data: u8) {
         if data & 0x80 != 0 {
-            self.reset()
+            self.reset();
+            return;
         }
+
         self.shift_register = self.shift_register >> 1;
         self.shift_register = self.shift_register | ((data & 0x01) << 4);
         self.shift_count += 1;
@@ -79,6 +83,14 @@ impl Mapper1 {
             3 => Mirroring::HORIZONTAL,
             _ => panic!("not support mirroring mode."),
         }
+    }
+
+    pub fn write_prg_ram(&mut self, addr: u16, data: u8) {
+        self.prg_ram[addr as usize - 0x6000] = data
+    }
+
+    pub fn read_prg_ram(&self, addr: u16) -> u8 {
+        self.prg_ram[addr as usize - 0x6000]
     }
 
     pub fn read_prg_rom(&self, addr: u16) -> u8 {
@@ -120,24 +132,34 @@ impl Mapper1 {
             _ => panic!("can't be"),
         }
     }
+
+    pub fn write_chr_rom(&mut self, addr: u16, value: u8) {
+        let mirrored_addr = self.chr_rom_addr(addr);
+        self.rom.chr_rom[mirrored_addr] = value
+    }
+
     pub fn read_chr_rom(&self, addr: u16) -> u8 {
+        self.rom.chr_rom[self.chr_rom_addr(addr)]
+    }
+
+    fn chr_rom_addr(&self, addr: u16) -> usize {
         let bank_len = 4 * 1024 as usize;
         match (self.control & 0x10) >> 4 {
             0 => {
                 // 一度に 8 KB を切り替え
                 let bank = self.chr_bank0 & 0x1F;
-                self.rom.chr_rom[addr as usize + bank_len * bank as usize]
+                addr as usize + bank_len * bank as usize
             }
             1 => {
                 // 2 つの別々の 4 KB バンクを切り替え
                 match addr {
                     0x0000..=0x0FFF => {
                         let bank = self.chr_bank0 & 0x1F;
-                        self.rom.chr_rom[addr as usize + bank_len * bank as usize]
+                        addr as usize + bank_len * bank as usize
                     }
                     0x1000..=0x1FFF => {
                         let bank = self.chr_bank1 & 0x1F;
-                        self.rom.chr_rom[addr as usize - 0x1000 + bank_len * bank as usize]
+                        addr as usize - 0x1000 + bank_len * bank as usize
                     }
                     _ => panic!("can't be"),
                 }
