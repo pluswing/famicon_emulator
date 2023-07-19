@@ -1,4 +1,6 @@
 use crate::rom::{Mirroring, Rom};
+use std::fs::File;
+use std::io::{self, BufReader, Read, Write};
 
 pub struct Mapper0 {
     pub prg_rom: Vec<u8>,
@@ -86,7 +88,12 @@ impl Mapper1 {
     }
 
     pub fn write_prg_ram(&mut self, addr: u16, data: u8) {
-        self.prg_ram[addr as usize - 0x6000] = data
+        self.prg_ram[addr as usize - 0x6000] = data;
+
+        // FIXME　保存処理
+        let mut file = File::create("save.dat").unwrap();
+        file.write_all(&self.prg_ram).unwrap();
+        file.flush().unwrap();
     }
 
     pub fn read_prg_ram(&self, addr: u16) -> u8 {
