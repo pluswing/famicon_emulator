@@ -35,6 +35,8 @@ use sdl2::EventPump;
 use std::collections::HashMap;
 use std::io::Write;
 use std::sync::Mutex;
+use std::thread::sleep;
+use std::time::{Duration, Instant};
 
 lazy_static! {
     pub static ref MAPPER: Mutex<Box<Mapper1>> = Mutex::new(Box::new(Mapper1::new()));
@@ -79,10 +81,6 @@ fn main() {
     key_map.insert(Keycode::A, joypad::JoypadButton::BUTTON_A);
     key_map.insert(Keycode::S, joypad::JoypadButton::BUTTON_B);
 
-    let rom = load_rom("rom/BombSweeper.nes");
-    let rom = alter_ego_rom();
-    let rom = load_rom("rom/Dragon Quest II - Akuryou no Kamigami (Japan).nes");
-    let rom = mario_rom();
     let rom = load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes");
 
     info!(
@@ -91,6 +89,9 @@ fn main() {
     );
 
     MAPPER.lock().unwrap().rom = rom;
+
+    let mut now = Instant::now();
+    let interval = 1000 * 1000 * 1000 / 60;
 
     let mut frame = Frame::new();
     let apu = NesAPU::new(&sdl_context);
@@ -121,6 +122,12 @@ fn main() {
                 _ => { /* do nothing */ }
             }
         }
+
+        let time = now.elapsed().as_nanos();
+        if time < interval {
+            sleep(Duration::from_nanos((interval - time) as u64));
+        }
+        now = Instant::now();
     });
 
     let mut cpu = CPU::new(bus);
