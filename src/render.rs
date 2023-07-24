@@ -156,17 +156,17 @@ fn bg_pallette(
     let pallette_start: usize = 1 + (pallet_idx as usize) * 4;
     let p = ppu.read_palette_table(tile_row * 8);
     [
-        p[0],
-        p[pallette_start],
-        p[pallette_start + 1],
-        p[pallette_start + 2],
+        p[0] & 0x3F,
+        p[pallette_start] & 0x3F,
+        p[pallette_start + 1] & 0x3F,
+        p[pallette_start + 2] & 0x3F,
     ]
 }
 
 fn sprite_palette(ppu: &NesPPU, tile_y: usize, palette_idx: u8) -> [u8; 4] {
     let start = 0x11 + (palette_idx * 4) as usize;
     let p = ppu.read_palette_table(tile_y);
-    [0, p[start], p[start + 1], p[start + 2]]
+    [0, p[start] & 0x3F, p[start + 1] & 0x3F, p[start + 2] & 0x3F]
 }
 
 fn render_name_table(

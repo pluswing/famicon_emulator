@@ -27,7 +27,7 @@ impl Mapper0 {
 
 pub struct Mapper1 {
     pub rom: Rom,
-    prg_ram: [u8; 8192],
+    prg_ram: Vec<u8>,
 
     shift_register: u8,
     shift_count: u8,
@@ -43,7 +43,7 @@ impl Mapper1 {
     pub fn new() -> Self {
         Mapper1 {
             rom: Rom::empty(),
-            prg_ram: [0xFF; 8192],
+            prg_ram: vec![0xFF; 8192],
             shift_register: 0x10,
             shift_count: 0,
 
@@ -99,6 +99,10 @@ impl Mapper1 {
 
     pub fn read_prg_ram(&self, addr: u16) -> u8 {
         self.prg_ram[addr as usize - 0x6000]
+    }
+
+    pub fn load_prg_ram(&mut self, raw: &Vec<u8>) {
+        self.prg_ram = raw.to_vec()
     }
 
     pub fn read_prg_rom(&self, addr: u16) -> u8 {

@@ -33,6 +33,8 @@ use sdl2::pixels::Color;
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::EventPump;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Read;
 use std::io::Write;
 use std::sync::Mutex;
 use std::thread::sleep;
@@ -90,6 +92,8 @@ fn main() {
     );
 
     MAPPER.lock().unwrap().rom = rom;
+
+    load_save_data("save_dq4.dat");
 
     let mut now = Instant::now();
     let interval = 1000 * 1000 * 1000 / 60;
@@ -167,6 +171,14 @@ fn main() {
             ::std::thread::sleep(std::time::Duration::new(0, 70_000));
         });
     */
+}
+
+fn load_save_data(path: &str) {
+    let mut f = File::open(path).expect("no save file found");
+    let metadata = std::fs::metadata(path).expect("unable to read metadata");
+    let mut buffer = vec![0; metadata.len() as usize];
+    f.read(&mut buffer).expect("buffer overflow");
+    MAPPER.lock().unwrap().load_prg_ram(&buffer)
 }
 
 fn handle_user_input(cpu: &mut CPU, event_pump: &mut EventPump) {
