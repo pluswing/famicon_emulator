@@ -78,7 +78,7 @@ impl NesAPU {
         self.ch1_sender
             .send(SquareEvent::LengthCounter(LengthCounter::new(
                 self.ch1_register.key_off_counter_flag,
-                LENGTH_COUNTER_TABLE[self.ch1_register.key_off_count as usize],
+                self.ch1_register.key_off_count,
             )))
             .unwrap();
 
@@ -117,7 +117,7 @@ impl NesAPU {
         self.ch2_sender
             .send(SquareEvent::LengthCounter(LengthCounter::new(
                 self.ch2_register.key_off_counter_flag,
-                LENGTH_COUNTER_TABLE[self.ch2_register.key_off_count as usize],
+                self.ch2_register.key_off_count,
             )))
             .unwrap();
 
@@ -148,7 +148,7 @@ impl NesAPU {
         self.ch3_sender
             .send(TriangleEvent::LengthCounter(LengthCounter::new(
                 self.ch3_register.key_off_counter_flag,
-                LENGTH_COUNTER_TABLE[self.ch3_register.key_off_count as usize],
+                self.ch3_register.key_off_count,
             )))
             .unwrap();
 
@@ -160,18 +160,10 @@ impl NesAPU {
     pub fn write4ch(&mut self, addr: u16, value: u8) {
         self.ch4_register.write(addr, value);
 
-        let hz = NES_CPU_CLOCK / NOISE_TABLE[self.ch4_register.frequency as usize] as f32;
-        let is_long = match self.ch4_register.kind {
-            NoiseKind::Long => true,
-            _ => false,
-        };
-        let volume = (self.ch4_register.volume as f32) / 15.0;
-
         self.ch4_sender
             .send(NoiseEvent::Note(NoiseNote {
-                hz: hz,
-                is_long: is_long,
-                volume: volume,
+                frequency: self.ch4_register.frequency,
+                kind: self.ch4_register.kind,
             }))
             .unwrap();
 
@@ -186,7 +178,7 @@ impl NesAPU {
         self.ch4_sender
             .send(NoiseEvent::LengthCounter(LengthCounter::new(
                 self.ch4_register.key_off_counter_flag,
-                LENGTH_COUNTER_TABLE[self.ch4_register.key_off_count as usize],
+                self.ch4_register.key_off_count,
             )))
             .unwrap();
 
@@ -260,7 +252,9 @@ impl NesAPU {
                     if self.counter == 4 {
                         // 割り込みフラグセット
                         self.counter = 0;
-                        self.status.insert(StatusRegister::ENABLE_FRAME_IRQ);
+                        if self.frame_counter.irq() {
+                            self.status.insert(StatusRegister::ENABLE_FRAME_IRQ);
+                        }
                     }
                     // エンベロープと三角波の線形カウンタのクロック生成
                     self.send_envelope_tick();
@@ -476,6 +470,7 @@ impl Ch3Register {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum NoiseKind {
     Long,
     Short,
@@ -598,7 +593,7 @@ impl LengthCounter {
     fn new(enabled: bool, counter: u8) -> Self {
         LengthCounter {
             enabled,
-            count: counter,
+            count: LENGTH_COUNTER_TABLE[counter as usize],
             counter,
         }
     }
@@ -659,14 +654,17 @@ impl Sweep {
         }
     }
 
-    fn tick(&mut self) {
+    fn tick(&mut self, length_counter: &LengthCounter) {
         if !self.enabled {
             return;
         }
         if self.change_amount == 0 {
             return;
         }
-        // TODO チャンネルの長さカウンタがゼロではない
+        // チャンネルの長さカウンタがゼロではない
+        if length_counter.mute() {
+            return;
+        }
 
         self.counter += 1;
         if self.counter < (self.timer_count + 1) {
@@ -762,7 +760,7 @@ impl AudioCallback for SquareWave {
                     Ok(SquareEvent::LengthCounter(l)) => self.length_counter = l,
                     Ok(SquareEvent::LengthCounterTick()) => self.length_counter.tick(),
                     Ok(SquareEvent::Sweep(s)) => self.sweep = s,
-                    Ok(SquareEvent::SweepTick()) => self.sweep.tick(),
+                    Ok(SquareEvent::SweepTick()) => self.sweep.tick(&self.length_counter),
                     Ok(SquareEvent::Reset()) => {
                         self.envelope.reset();
                         self.length_counter.reset();
@@ -936,9 +934,25 @@ enum NoiseEvent {
 }
 #[derive(Debug, Clone, PartialEq)]
 struct NoiseNote {
-    hz: f32,
-    is_long: bool,
-    volume: f32,
+    frequency: u8,
+    kind: NoiseKind,
+}
+
+impl NoiseNote {
+    fn new() -> Self {
+        NoiseNote {
+            frequency: 0,
+            kind: NoiseKind::Long,
+        }
+    }
+
+    fn hz(&self) -> f32 {
+        NES_CPU_CLOCK / NOISE_TABLE[self.frequency as usize] as f32
+    }
+
+    fn is_long(&self) -> bool {
+        self.kind == NoiseKind::Long
+    }
 }
 
 struct NoiseWave {
@@ -988,9 +1002,9 @@ impl AudioCallback for NoiseWave {
             }
 
             let last_phase = self.phase;
-            self.phase = (self.phase + self.note.hz / self.freq) % 1.0;
+            self.phase = (self.phase + self.note.hz() / self.freq) % 1.0;
             if last_phase > self.phase {
-                self.value = if self.note.is_long {
+                self.value = if self.note.is_long() {
                     self.long_random.next()
                 } else {
                     self.short_random.next()
@@ -1047,11 +1061,7 @@ fn init_noise(sdl_context: &sdl2::Sdl) -> (AudioDevice<NoiseWave>, Sender<NoiseE
             short_random: NoiseRandom::short(),
             enabled: true,
             envelope: Envelope::new(0, false, false),
-            note: NoiseNote {
-                hz: 0.0,
-                is_long: true,
-                volume: 0.0,
-            },
+            note: NoiseNote::new(),
             length_counter: LengthCounter::new(false, 0),
         })
         .unwrap();
