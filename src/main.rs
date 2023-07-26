@@ -24,7 +24,7 @@ use cartridge::test::{alter_ego_rom, mario_rom, test_rom};
 use frame::{show_tile, Frame};
 use joypad::Joypad;
 use log::{debug, info, log_enabled, trace, Level};
-use mapper::{Mapper0, Mapper1, Mapper2};
+use mapper::{Mapper, Mapper0, Mapper1, Mapper2};
 use ppu::NesPPU;
 use rand::Rng;
 use sdl2::event::Event;
@@ -85,6 +85,7 @@ fn main() {
 
     let rom = load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes");
     let rom = load_rom("rom/Dragon Quest IV - Michibikareshi Monotachi (Japan) (Rev 1).nes");
+    let rom = mario_rom();
 
     info!(
         "ROM: mapper={}, mirroring={:?} chr_ram={}",
