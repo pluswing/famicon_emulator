@@ -1,6 +1,7 @@
 use bitflags::bitflags;
 use log::{debug, info, trace};
 
+use crate::mapper::Mapper;
 use crate::{cpu::IN_TRACE, rom::Mirroring, MAPPER};
 
 pub struct NesPPU {

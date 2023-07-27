@@ -1,6 +1,7 @@
 use log::{debug, info};
 
 use crate::frame::Frame;
+use crate::mapper::Mapper;
 use crate::ppu::NesPPU;
 use crate::rom::Mirroring;
 use crate::{palette, MAPPER};

@@ -2,11 +2,23 @@ use crate::rom::{Mirroring, Rom};
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
 
+/*
+pub fn craete_mapper(rom: Rom) -> dyn Mapper {
+    let mapper: dyn Mapper = match rom.mapper {
+        0 => Mapper0::new(),
+        1 => Mapper1::new(),
+        2 => Mapper2::new(),
+    };
+    mapper.rom = rom;
+    return mapper;
+}
+*/
+
 pub trait Mapper {
     fn write(&mut self, addr: u16, data: u8);
     fn mirroring(&self) -> Mirroring;
     fn write_prg_ram(&mut self, addr: u16, data: u8);
-    fn read_prg_ram(&self, addr: u16);
+    fn read_prg_ram(&self, addr: u16) -> u8;
     fn load_prg_ram(&mut self, raw: &Vec<u8>);
     fn read_prg_rom(&self, addr: u16) -> u8;
     fn write_chr_rom(&mut self, addr: u16, value: u8);
@@ -29,7 +41,9 @@ impl Mapper for Mapper0 {
         self.rom.screen_mirroring
     }
     fn write_prg_ram(&mut self, addr: u16, data: u8) {}
-    fn read_prg_ram(&self, addr: u16) {}
+    fn read_prg_ram(&self, addr: u16) -> u8 {
+        0
+    }
     fn load_prg_ram(&mut self, raw: &Vec<u8>) {}
     fn read_prg_rom(&self, addr: u16) -> u8 {
         let mut mirror_addr = addr - 0x8000;
@@ -191,36 +205,54 @@ impl Mapper for Mapper1 {
 }
 
 pub struct Mapper2 {
-    pub prg_rom: Vec<u8>,
+    pub rom: Rom,
     bank_select: u8,
 }
 
 impl Mapper2 {
     pub fn new() -> Self {
         Mapper2 {
-            prg_rom: vec![],
+            rom: Rom::empty(),
             bank_select: 0,
         }
     }
+}
 
-    pub fn write(&mut self, addr: u16, data: u8) {
+impl Mapper for Mapper2 {
+    fn write(&mut self, addr: u16, data: u8) {
         self.bank_select = data;
     }
+    fn mirroring(&self) -> Mirroring {
+        self.rom.screen_mirroring
+    }
 
-    pub fn read_prg_rom(&self, addr: u16) -> u8 {
+    fn write_prg_ram(&mut self, addr: u16, data: u8) {}
+    fn read_prg_ram(&self, addr: u16) -> u8 {
+        0
+    }
+    fn load_prg_ram(&mut self, raw: &Vec<u8>) {}
+
+    fn read_prg_rom(&self, addr: u16) -> u8 {
         let bank_len = 16 * 1024 as usize;
-        let bank_max = self.prg_rom.len() / bank_len;
+        let bank_max = self.rom.prg_rom.len() / bank_len;
         match addr {
             0x8000..=0xBFFF => {
                 // bank_select
                 let bank = self.bank_select & 0x0F;
-                self.prg_rom[(addr as usize - 0x8000 + bank_len * bank as usize) as usize]
+                self.rom.prg_rom[(addr as usize - 0x8000 + bank_len * bank as usize) as usize]
             }
             0xC000..=0xFFFF => {
                 // 最後のバンク固定
-                self.prg_rom[(addr as usize - 0xC000 + bank_len * (bank_max - 1)) as usize]
+                self.rom.prg_rom[(addr as usize - 0xC000 + bank_len * (bank_max - 1)) as usize]
             }
             _ => panic!("can't be"),
         }
+    }
+
+    fn write_chr_rom(&mut self, addr: u16, value: u8) {
+        self.rom.chr_rom[addr as usize] = value;
+    }
+    fn read_chr_rom(&self, addr: u16) -> u8 {
+        self.rom.chr_rom[addr as usize]
     }
 }

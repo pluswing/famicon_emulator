@@ -1,4 +1,5 @@
 use crate::joypad::Joypad;
+use crate::mapper::Mapper;
 use crate::ppu::NesPPU;
 use crate::{apu::NesAPU, MAPPER};
 use log::{debug, error, info, log_enabled, trace, warn, Level};
@@ -180,7 +181,6 @@ impl Mem for Bus<'_> {
                 //   APUフレームカウンター
                 //   https://www.nesdev.org/wiki/APU_Frame_Counter
                 self.apu.write_frame_counter(data);
-                info!("WRITE ACCESS 0x4017. {:02X}", data);
             }
             0x4014 => {
                 // $XX を書き込むと、256 バイトのデータが CPU ページ $XX00 ～ $XXFF から内部 PPU OAM にアップロードされます。このページは通常、内部 RAM (通常は $0200 ～ $02FF) にありますが、カートリッジ RAM または ROM も使用できます。
