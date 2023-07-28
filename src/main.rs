@@ -41,7 +41,7 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 lazy_static! {
-    pub static ref MAPPER: Mutex<Box<Mapper0>> = Mutex::new(Box::new(Mapper0::new()));
+    pub static ref MAPPER: Mutex<Box<Mapper1>> = Mutex::new(Box::new(Mapper1::new()));
 }
 
 fn main() {
@@ -83,10 +83,10 @@ fn main() {
     key_map.insert(Keycode::A, joypad::JoypadButton::BUTTON_A);
     key_map.insert(Keycode::S, joypad::JoypadButton::BUTTON_B);
 
-    let rom = load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes");
     let rom = load_rom("rom/Dragon Quest IV - Michibikareshi Monotachi (Japan) (Rev 1).nes");
-    let rom = load_rom("rom/Dragon Quest II - Akuryou no Kamigami (Japan).nes");
-    let rom = mario_rom();
+    let rom = load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes");
+    // let rom = load_rom("rom/Dragon Quest II - Akuryou no Kamigami (Japan).nes");
+    // let rom = mario_rom();
 
     // mapper = craete_mapper(rom)
 

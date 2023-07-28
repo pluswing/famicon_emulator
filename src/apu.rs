@@ -594,7 +594,7 @@ impl LengthCounter {
         LengthCounter {
             enabled,
             count: LENGTH_COUNTER_TABLE[counter as usize],
-            counter,
+            counter: LENGTH_COUNTER_TABLE[counter as usize],
         }
     }
 
@@ -608,7 +608,10 @@ impl LengthCounter {
     }
 
     fn mute(&self) -> bool {
-        !self.enabled || self.counter == 0
+        if !self.enabled {
+            return true;
+        }
+        self.counter == 0
     }
 
     fn reset(&mut self) {
