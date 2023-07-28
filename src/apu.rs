@@ -608,10 +608,7 @@ impl LengthCounter {
     }
 
     fn mute(&self) -> bool {
-        if !self.enabled {
-            return true;
-        }
-        self.counter == 0
+        self.enabled && self.counter == 0
     }
 
     fn reset(&mut self) {
