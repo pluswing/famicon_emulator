@@ -85,7 +85,7 @@ fn main() {
 
     let rom = load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes");
     let rom = load_rom("rom/Dragon Quest IV - Michibikareshi Monotachi (Japan) (Rev 1).nes");
-    let rom = load_rom("rom/Dragon Quest II - Akuryou no Kamigami (Japan).nes");
+    /// let rom = load_rom("rom/Dragon Quest II - Akuryou no Kamigami (Japan).nes");
     let rom = mario_rom();
 
     // mapper = craete_mapper(rom)
