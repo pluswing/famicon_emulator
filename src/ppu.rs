@@ -73,8 +73,10 @@ impl NesPPU {
             0x0000..=0x1FFF => {
                 // FIXME
                 debug!("write CHR_ROM {:04X} => {:02X}", addr, value);
-                if MAPPER.lock().unwrap().rom.is_chr_ram {
-                    MAPPER.lock().unwrap().write_chr_rom(addr, value);
+                if unsafe { MAPPER.lock().unwrap().is_chr_ram() } {
+                    unsafe {
+                        MAPPER.lock().unwrap().write_chr_rom(addr, value);
+                    }
                 }
             }
             0x2000..=0x2FFF => {
@@ -250,7 +252,7 @@ impl NesPPU {
                 } else {
                     let result = self.internal_data_buf;
 
-                    self.internal_data_buf = MAPPER.lock().unwrap().read_chr_rom(addr);
+                    self.internal_data_buf = unsafe { MAPPER.lock().unwrap().read_chr_rom(addr) };
                     result
                 }
             }
@@ -289,7 +291,7 @@ impl NesPPU {
         let mirrored_vram = addr & 0b10_1111_1111_1111;
         let vram_index = mirrored_vram - 0x2000;
         let name_table = vram_index / 0x400;
-        let mirroring = MAPPER.lock().unwrap().mirroring();
+        let mirroring = unsafe { MAPPER.lock().unwrap().mirroring() };
         match (&mirroring, name_table) {
             (Mirroring::VERTICAL, 2) => vram_index - 0x800,
             (Mirroring::VERTICAL, 3) => vram_index - 0x800,

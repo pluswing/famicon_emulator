@@ -24,9 +24,11 @@ use cartridge::test::{alter_ego_rom, mario_rom, test_rom};
 use frame::{show_tile, Frame};
 use joypad::Joypad;
 use log::{debug, info, log_enabled, trace, Level};
-use mapper::{Mapper, Mapper0, Mapper1, Mapper2};
+use mapper::{create_mapper, Mapper, Mapper0, Mapper1, Mapper2};
+use once_cell::sync::Lazy;
 use ppu::NesPPU;
 use rand::Rng;
+use rom::Rom;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
@@ -40,9 +42,8 @@ use std::sync::Mutex;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-lazy_static! {
-    pub static ref MAPPER: Mutex<Box<Mapper0>> = Mutex::new(Box::new(Mapper0::new()));
-}
+static mut MAPPER: Lazy<Mutex<Box<dyn Mapper>>> =
+    Lazy::new(|| Mutex::new(create_mapper(Rom::empty())));
 
 fn main() {
     env_logger::builder()
@@ -85,18 +86,17 @@ fn main() {
 
     let rom = load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes");
     let rom = load_rom("rom/Dragon Quest IV - Michibikareshi Monotachi (Japan) (Rev 1).nes");
-    /// let rom = load_rom("rom/Dragon Quest II - Akuryou no Kamigami (Japan).nes");
-    let rom = mario_rom();
-
-    // mapper = craete_mapper(rom)
+    // let rom = load_rom("rom/Dragon Quest II - Akuryou no Kamigami (Japan).nes");
+    // let rom = mario_rom();
 
     info!(
         "ROM: mapper={}, mirroring={:?} chr_ram={}",
         rom.mapper, rom.screen_mirroring, rom.is_chr_ram
     );
 
-    MAPPER.lock().unwrap().rom = rom;
-
+    unsafe {
+        *MAPPER = Mutex::new(create_mapper(rom));
+    }
     // load_save_data("save_dq4.dat");
 
     let mut now = Instant::now();
@@ -182,7 +182,7 @@ fn load_save_data(path: &str) {
     let metadata = std::fs::metadata(path).expect("unable to read metadata");
     let mut buffer = vec![0; metadata.len() as usize];
     f.read(&mut buffer).expect("buffer overflow");
-    MAPPER.lock().unwrap().load_prg_ram(&buffer)
+    unsafe { MAPPER.lock().unwrap().load_prg_ram(&buffer) }
 }
 
 fn handle_user_input(cpu: &mut CPU, event_pump: &mut EventPump) {

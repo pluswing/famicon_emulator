@@ -111,8 +111,8 @@ impl Mem for Bus<'_> {
                 // self.joypad2.read()
                 0
             }
-            0x6000..=0x7FFF => MAPPER.lock().unwrap().read_prg_ram(addr),
-            PRG_ROM..=PRG_ROM_END => MAPPER.lock().unwrap().read_prg_rom(addr),
+            0x6000..=0x7FFF => unsafe { MAPPER.lock().unwrap().read_prg_ram(addr) },
+            PRG_ROM..=PRG_ROM_END => unsafe { MAPPER.lock().unwrap().read_prg_rom(addr) },
             _ => {
                 warn!("Ignoreing mem access at {:X}", addr);
                 0
@@ -194,9 +194,9 @@ impl Mem for Bus<'_> {
                     self.ppu.tick(1);
                 }
             }
-            0x6000..=0x7FFF => MAPPER.lock().unwrap().write_prg_ram(addr, data),
+            0x6000..=0x7FFF => unsafe { MAPPER.lock().unwrap().write_prg_ram(addr, data) },
             PRG_ROM..=PRG_ROM_END => {
-                MAPPER.lock().unwrap().write(addr, data);
+                unsafe { MAPPER.lock().unwrap().write(addr, data) };
             }
             _ => {
                 error!("Ignoreing mem write-access at {:X}", addr)

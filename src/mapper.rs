@@ -2,19 +2,20 @@ use crate::rom::{Mirroring, Rom};
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
 
-/*
-pub fn craete_mapper(rom: Rom) -> dyn Mapper {
-    let mapper: dyn Mapper = match rom.mapper {
-        0 => Mapper0::new(),
-        1 => Mapper1::new(),
-        2 => Mapper2::new(),
+pub fn create_mapper(rom: Rom) -> Box<dyn Mapper> {
+    let mut mapper: Box<dyn Mapper> = match rom.mapper {
+        0 => Box::new(Mapper0::new()),
+        1 => Box::new(Mapper1::new()),
+        2 => Box::new(Mapper2::new()),
+        _ => panic!("not support mapper."),
     };
-    mapper.rom = rom;
+    mapper.set_rom(rom);
     return mapper;
 }
-*/
 
-pub trait Mapper {
+pub trait Mapper: Send {
+    fn set_rom(&mut self, rom: Rom);
+    fn is_chr_ram(&mut self) -> bool;
     fn write(&mut self, addr: u16, data: u8);
     fn mirroring(&self) -> Mirroring;
     fn write_prg_ram(&mut self, addr: u16, data: u8);
@@ -36,6 +37,12 @@ impl Mapper0 {
 }
 
 impl Mapper for Mapper0 {
+    fn set_rom(&mut self, rom: Rom) {
+        self.rom = rom
+    }
+    fn is_chr_ram(&mut self) -> bool {
+        self.rom.is_chr_ram
+    }
     fn write(&mut self, addr: u16, data: u8) {}
     fn mirroring(&self) -> Mirroring {
         self.rom.screen_mirroring
@@ -95,6 +102,12 @@ impl Mapper1 {
 }
 
 impl Mapper for Mapper1 {
+    fn set_rom(&mut self, rom: Rom) {
+        self.rom = rom
+    }
+    fn is_chr_ram(&mut self) -> bool {
+        self.rom.is_chr_ram
+    }
     fn write(&mut self, addr: u16, data: u8) {
         if data & 0x80 != 0 {
             self.reset();
@@ -219,6 +232,12 @@ impl Mapper2 {
 }
 
 impl Mapper for Mapper2 {
+    fn set_rom(&mut self, rom: Rom) {
+        self.rom = rom
+    }
+    fn is_chr_ram(&mut self) -> bool {
+        self.rom.is_chr_ram
+    }
     fn write(&mut self, addr: u16, data: u8) {
         self.bank_select = data;
     }
