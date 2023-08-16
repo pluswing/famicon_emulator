@@ -79,7 +79,7 @@ const fetchUnofficialOps = async () => {
         cmode = "Page"
       }
       const cycles = s[4].replace(/ |\*/g, "").replace("-", "0")
-      return `OpCode::new(0x${code}, "*${name}", ${bytes}, ${cycles}, CycleCalcMode::${cmode}, AddressingMode::${mode}),`
+      return `m.insert(0x${code}, OpCode::new(0x${code}, "*${name}", ${bytes}, ${cycles}, CycleCalcMode::${cmode}, AddressingMode::${mode}));`
     });
   }).flat();
   return [defs.map((v) => v[0]), codes];
@@ -134,7 +134,7 @@ const main = async () => {
       } else if (v.cyclesComment) {
         mode = "Branch"
       }
-      return `OpCode::new(0x${v.opcode}, "${name}", ${v.bytes}, ${v.cycles}, CycleCalcMode::${mode}, AddressingMode::${v.mode}),`
+      return `m.insert(0x${v.opcode}, OpCode::new(0x${v.opcode}, "${name}", ${v.bytes}, ${v.cycles}, CycleCalcMode::${mode}, AddressingMode::${v.mode}));`
     })
   }).flat().join("\n")
 
@@ -148,17 +148,20 @@ const main = async () => {
   })
 
   const header = `
+use std::{collections::HashMap, sync::Mutex};
+use once_cell::sync::Lazy;
 use crate::cpu::{AddressingMode, CycleCalcMode, OpCode, CPU};
 `.trim()
 
   const code = `
-lazy_static! {
-  pub static ref CPU_OPS_CODES: Vec<OpCode> = vec![
-${indent(opcodes, 2)}
+pub static CPU_OPS_CODES: Lazy<Mutex<HashMap<u8, OpCode>>> = Lazy::new(|| {
+  let mut m = HashMap::new();
 
-${indent(unofficialOpsCode, 2)}
-  ];
-}
+${indent(opcodes, 1)}
+
+${indent(unofficialOpsCode, 1)}
+  Mutex::new(m)
+});
 `
   const callCode = `
 pub fn call(cpu: &mut CPU, op: &OpCode) {
