@@ -154,13 +154,13 @@ use crate::cpu::{AddressingMode, CycleCalcMode, OpCode, CPU};
 `.trim()
 
   const code = `
-pub static CPU_OPS_CODES: Lazy<Mutex<HashMap<u8, OpCode>>> = Lazy::new(|| {
+pub static CPU_OPS_CODES: Lazy<HashMap<u8, OpCode>> = Lazy::new(|| {
   let mut m = HashMap::new();
 
 ${indent(opcodes, 1)}
 
 ${indent(unofficialOpsCode, 1)}
-  Mutex::new(m)
+  m
 });
 `
   const callCode = `

@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Mutex};
 use once_cell::sync::Lazy;
 use crate::cpu::{AddressingMode, CycleCalcMode, OpCode, CPU};
 
-pub static CPU_OPS_CODES: Lazy<Mutex<HashMap<u8, OpCode>>> = Lazy::new(|| {
+pub static CPU_OPS_CODES: Lazy<HashMap<u8, OpCode>> = Lazy::new(|| {
   let mut m = HashMap::new();
 
   m.insert(0x69, OpCode::new(0x69, "ADC", 2, 2, CycleCalcMode::None, AddressingMode::Immediate));
@@ -262,7 +262,7 @@ pub static CPU_OPS_CODES: Lazy<Mutex<HashMap<u8, OpCode>>> = Lazy::new(|| {
   m.insert(0xFC, OpCode::new(0xFC, "*NOP", 3, 4, CycleCalcMode::Page, AddressingMode::Absolute_X));
   m.insert(0x8B, OpCode::new(0x8B, "*ANE", 2, 2, CycleCalcMode::None, AddressingMode::Immediate));
   m.insert(0x9B, OpCode::new(0x9B, "*SHS", 3, 5, CycleCalcMode::None, AddressingMode::Absolute_Y));
-  Mutex::new(m)
+  m
 });
 
 

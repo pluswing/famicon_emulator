@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate lazy_static;
-
 mod apu;
 mod bus;
 mod cartridge;
@@ -42,8 +39,7 @@ use std::sync::Mutex;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-static mut MAPPER: Lazy<Mutex<Box<dyn Mapper>>> =
-    Lazy::new(|| Mutex::new(create_mapper(Rom::empty())));
+static mut MAPPER: Lazy<Box<dyn Mapper>> = Lazy::new(|| create_mapper(Rom::empty()));
 
 fn main() {
     env_logger::builder()
@@ -87,6 +83,7 @@ fn main() {
     let rom = load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes");
     let rom = load_rom("rom/Dragon Quest IV - Michibikareshi Monotachi (Japan) (Rev 1).nes");
     // let rom = load_rom("rom/Dragon Quest II - Akuryou no Kamigami (Japan).nes");
+    let rom = load_rom("rom/Dragon Quest (Japan).nes");
     // let rom = mario_rom();
 
     info!(
@@ -95,7 +92,7 @@ fn main() {
     );
 
     unsafe {
-        *MAPPER = Mutex::new(create_mapper(rom));
+        *MAPPER = create_mapper(rom);
     }
     // load_save_data("save_dq4.dat");
 
@@ -182,7 +179,7 @@ fn load_save_data(path: &str) {
     let metadata = std::fs::metadata(path).expect("unable to read metadata");
     let mut buffer = vec![0; metadata.len() as usize];
     f.read(&mut buffer).expect("buffer overflow");
-    unsafe { MAPPER.lock().unwrap().load_prg_ram(&buffer) }
+    unsafe { MAPPER.load_prg_ram(&buffer) }
 }
 
 fn handle_user_input(cpu: &mut CPU, event_pump: &mut EventPump) {

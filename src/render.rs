@@ -28,7 +28,7 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
     // draw background
     let scroll_x = (ppu.scroll.scroll_x) as usize;
     let scroll_y = (ppu.scroll.scroll_y) as usize;
-    let mirroring = unsafe { MAPPER.lock().unwrap().mirroring() };
+    let mirroring = unsafe { MAPPER.mirroring() };
     let (main_name_table, second_name_table) = match (&mirroring, ppu.ctrl.nametable_addr()) {
         (Mirroring::VERTICAL, 0x2000) | (Mirroring::VERTICAL, 0x2800) => {
             (&ppu.vram[0x000..0x400], &ppu.vram[0x400..0x800])
@@ -108,7 +108,7 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
         let start = bank + tile_idx * 16;
         let mut tile: [u8; 16] = [0; 16];
         for i in 0..=15 {
-            tile[i] = unsafe { MAPPER.lock().unwrap().read_chr_rom(start + i as u16) }
+            tile[i] = unsafe { MAPPER.read_chr_rom(start + i as u16) }
         }
 
         for y in 0..=7 {
@@ -189,7 +189,7 @@ fn render_name_table(
         let start = bank + tile_idx * 16;
         let mut tile: [u8; 16] = [0; 16];
         for i in 0..=15 {
-            tile[i] = unsafe { MAPPER.lock().unwrap().read_chr_rom(start + i as u16) }
+            tile[i] = unsafe { MAPPER.read_chr_rom(start + i as u16) }
         }
         let palette = bg_pallette(ppu, attribute_table, tile_column, tile_row);
 

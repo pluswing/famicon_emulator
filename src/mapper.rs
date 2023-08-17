@@ -7,6 +7,7 @@ pub fn create_mapper(rom: Rom) -> Box<dyn Mapper> {
         0 => Box::new(Mapper0::new()),
         1 => Box::new(Mapper1::new()),
         2 => Box::new(Mapper2::new()),
+        3 => Box::new(Mapper3::new()),
         _ => panic!("not support mapper."),
     };
     mapper.set_rom(rom);
@@ -273,5 +274,53 @@ impl Mapper for Mapper2 {
     }
     fn read_chr_rom(&self, addr: u16) -> u8 {
         self.rom.chr_rom[addr as usize]
+    }
+}
+
+pub struct Mapper3 {
+    pub rom: Rom,
+    bank_select: u8,
+}
+
+impl Mapper3 {
+    pub fn new() -> Self {
+        Mapper3 {
+            rom: Rom::empty(),
+            bank_select: 0,
+        }
+    }
+}
+
+impl Mapper for Mapper3 {
+    fn set_rom(&mut self, rom: Rom) {
+        self.rom = rom
+    }
+    fn is_chr_ram(&mut self) -> bool {
+        self.rom.is_chr_ram
+    }
+    fn write(&mut self, addr: u16, data: u8) {
+        self.bank_select = data;
+    }
+    fn mirroring(&self) -> Mirroring {
+        self.rom.screen_mirroring
+    }
+
+    fn write_prg_ram(&mut self, addr: u16, data: u8) {}
+    fn read_prg_ram(&self, addr: u16) -> u8 {
+        0
+    }
+    fn load_prg_ram(&mut self, raw: &Vec<u8>) {}
+
+    fn read_prg_rom(&self, addr: u16) -> u8 {
+        self.rom.prg_rom[(addr as usize - 0x8000)]
+    }
+
+    fn write_chr_rom(&mut self, addr: u16, value: u8) {
+        self.rom.chr_rom[addr as usize] = value;
+    }
+    fn read_chr_rom(&self, addr: u16) -> u8 {
+        let bank_len = 8 * 1024 as usize;
+        let bank = self.bank_select & 0x03;
+        self.rom.chr_rom[(addr as usize + bank_len * bank as usize) as usize]
     }
 }

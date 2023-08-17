@@ -75,7 +75,6 @@ version = "0.1.0"
 dependencies = [
  "bitflags 2.1.0",
  "env_logger",
- "lazy_static",
  "log",
  "once_cell",
  "rand",
