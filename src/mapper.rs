@@ -324,3 +324,92 @@ impl Mapper for Mapper3 {
         self.rom.chr_rom[(addr as usize + bank_len * bank as usize) as usize]
     }
 }
+
+pub struct Mapper4 {
+    pub rom: Rom,
+    // pub bank_select: u8,
+    // ..
+}
+
+impl Mapper4 {
+    pub fn new() -> Self {
+        Mapper4 { rom: Rom::empty() }
+    }
+}
+
+impl Mapper for Mapper4 {
+    fn set_rom(&mut self, rom: Rom) {
+        self.rom = rom
+    }
+    fn is_chr_ram(&mut self) -> bool {
+        self.rom.is_chr_ram
+    }
+    fn write(&mut self, addr: u16, data: u8) {
+        match addr {
+            0x8000..=0x9FFF => {
+                if addr & 0x01 == 0 {
+                    // バンクセレクト ($8000-$9FFE、偶数)
+                } else {
+                    // 銀行データ ($8001 ～ $9FFF、奇数)
+                }
+            }
+            0xA000..=0xBFFE => {
+                if addr & 0x01 == 0 {
+                    // ミラーリング ($A000-$BFFE、偶数)
+                } else {
+                    // PRG RAM 保護 ($A001-$BFFF、奇数)
+                }
+            }
+            0xC000..=0xDFFE => {
+                if addr & 0x01 == 0 {
+                    // IRQ ラッチ ($C000-$DFFE、偶数)
+                } else {
+                    // IRQ リロード ($C001-$DFFF、奇数)
+                }
+            }
+            0xE000..=0xFFFE => {
+                if addr & 0x01 == 0 {
+                    // IRQ 無効化 ($E000-$FFFE、偶数)
+                } else {
+                    // IRQ イネーブル ($E001-$FFFF、奇数)
+                }
+            }
+        }
+    }
+    fn mirroring(&self) -> Mirroring {
+        self.rom.screen_mirroring
+    }
+
+    fn write_prg_ram(&mut self, addr: u16, data: u8) {}
+    fn read_prg_ram(&self, addr: u16) -> u8 {
+        0
+    }
+    fn load_prg_ram(&mut self, raw: &Vec<u8>) {}
+
+    fn read_prg_rom(&self, addr: u16) -> u8 {
+        // TODO
+        /*
+        $8000-$9FFF	R6	(-2)
+        $A000-$BFFF	R7	R7
+        $C000-$DFFF	(-2)	R6
+        $E000-$FFFF	(-1)	(-1)
+         */
+    }
+
+    fn write_chr_rom(&mut self, addr: u16, value: u8) {
+        self.rom.chr_rom[addr as usize] = value;
+    }
+    fn read_chr_rom(&self, addr: u16) -> u8 {
+        // TODO
+        /*
+        $0000-$03FF	R0	R2
+        $0400-$07FF	R3
+        $0800-$0BFF	R1	R4
+        $0C00-$0FFF	R5
+        $1000-$13FF	R2	R0
+        $1400-$17FF	R3
+        $1800-$1BFF	R4	R1
+        $1C00-$1FFF	R5
+         */
+    }
+}
