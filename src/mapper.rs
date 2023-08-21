@@ -327,13 +327,27 @@ impl Mapper for Mapper3 {
 
 pub struct Mapper4 {
     pub rom: Rom,
-    // pub bank_select: u8,
-    // ..
+    bank_select: u8,
+    bank_data: [u8; 8],
+    mirroring: Mirroring,
+    prg_ram_protect: u8,
+    irq_latch: u8,
+    irq_reload: bool,
+    irq_enable: bool,
 }
 
 impl Mapper4 {
     pub fn new() -> Self {
-        Mapper4 { rom: Rom::empty() }
+        Mapper4 {
+            rom: Rom::empty(),
+            bank_select: 0,
+            bank_data: [0; 8],
+            mirroring: Mirroring::VERTICAL,
+            prg_ram_protect: 0,
+            irq_latch: 0,
+            irq_reload: false,
+            irq_enable: 0,
+        }
     }
 }
 
@@ -349,35 +363,47 @@ impl Mapper for Mapper4 {
             0x8000..=0x9FFF => {
                 if addr & 0x01 == 0 {
                     // バンクセレクト ($8000-$9FFE、偶数)
+                    self.bank_select = data;
                 } else {
                     // 銀行データ ($8001 ～ $9FFF、奇数)
+                    self.bank_data[(self.bank_select & 0x07) as usize] = data;
                 }
             }
             0xA000..=0xBFFE => {
                 if addr & 0x01 == 0 {
                     // ミラーリング ($A000-$BFFE、偶数)
+                    self.mirroring = if data & 0x01 == 0 {
+                        Mirroring::VERTICAL
+                    } else {
+                        Mirroring::HORIZONTAL
+                    };
                 } else {
                     // PRG RAM 保護 ($A001-$BFFF、奇数)
+                    self.prg_ram_protect = data;
                 }
             }
             0xC000..=0xDFFE => {
                 if addr & 0x01 == 0 {
                     // IRQ ラッチ ($C000-$DFFE、偶数)
+                    self.irq_latch = data;
                 } else {
                     // IRQ リロード ($C001-$DFFF、奇数)
+                    self.irq_reload = true;
                 }
             }
             0xE000..=0xFFFE => {
                 if addr & 0x01 == 0 {
                     // IRQ 無効化 ($E000-$FFFE、偶数)
+                    self.irq_enable = false;
                 } else {
                     // IRQ イネーブル ($E001-$FFFF、奇数)
+                    self.irq_enable = true;
                 }
             }
         }
     }
     fn mirroring(&self) -> Mirroring {
-        self.rom.screen_mirroring
+        self.mirroring
     }
 
     fn write_prg_ram(&mut self, addr: u16, data: u8) {}
@@ -387,6 +413,32 @@ impl Mapper for Mapper4 {
     fn load_prg_ram(&mut self, raw: &Vec<u8>) {}
 
     fn read_prg_rom(&self, addr: u16) -> u8 {
+        let bank_len = 8 * 1024 as usize;
+        let bank_max = (self.rom.prg_rom.len() / bank_len) as usize;
+
+        let mode = self.bank_select & 0x40;
+
+        let last_bank = bank_max - 1;
+        let last_bank2 = bank_max - 2;
+        let r6_bank = self.bank_data[6] as usize;
+        let r7_bank = self.bank_data[7] as usize;
+
+        match mode {
+            0 => match addr {
+                0x8000..=0x9FFF => {
+                    self.rom.prg_rom[((addr - 0x8000) as usize + r6_bank * bank_len) as usize]
+                }
+                0xA000..=0xBFFF => {}
+                0xC000..=0xDFFF => {}
+                0xE000..=0xFFFF => {}
+            },
+            _ => match addr {
+                0x8000..=0x9FFF => {}
+                0xA000..=0xBFFF => {}
+                0xC000..=0xDFFF => {}
+                0xE000..=0xFFFF => {}
+            },
+        }
         // TODO
         /*
         $8000-$9FFF	R6	(-2)
