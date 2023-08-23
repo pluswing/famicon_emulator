@@ -350,6 +350,47 @@ impl Mapper4 {
             irq_enable: false,
         }
     }
+    fn chr_rom_addr(&self, addr: u16) -> u16 {
+        let bank_len = 1 * 1024;
+
+        let mode = self.bank_select & 0x80;
+
+        let r0_bank = self.bank_data[0] as u16;
+        let r1_bank = self.bank_data[1] as u16;
+        let r2_bank = self.bank_data[2] as u16;
+        let r3_bank = self.bank_data[3] as u16;
+        let r4_bank = self.bank_data[4] as u16;
+        let r5_bank = self.bank_data[5] as u16;
+
+        match mode {
+            0 => match addr {
+                // 0x0000..=0x03FF
+                // 0x0400..=0x07FF
+                0x0000..=0x07FF => addr + r0_bank * bank_len,
+                // 0x0800..=0x0BFF
+                // 0x0C00..=0x0FFF
+                0x0800..=0x0FFF => (addr - 0x0800) + r1_bank * bank_len,
+                0x1000..=0x13FF => (addr - 0x1000) + r2_bank * bank_len,
+                0x1400..=0x17FF => (addr - 0x1400) + r3_bank * bank_len,
+                0x1800..=0x1BFF => (addr - 0x1800) + r4_bank * bank_len,
+                0x1C00..=0x1FFF => (addr - 0x1C00) + r5_bank * bank_len,
+                _ => panic!("can't be"),
+            },
+            _ => match addr {
+                0x0000..=0x03FF => addr + r2_bank * bank_len,
+                0x0400..=0x07FF => (addr - 0x0400) + r3_bank * bank_len,
+                0x0800..=0x0BFF => (addr - 0x0800) + r4_bank * bank_len,
+                0x0C00..=0x0FFF => (addr - 0x0C00) + r5_bank * bank_len,
+                // 0x1000..=0x13FF
+                // 0x1400..=0x17FF
+                0x1000..=0x17FF => (addr - 0x1000) + r0_bank * bank_len,
+                // 0x1800..=0x1BFF
+                // 0x1C00..=0x1FFF
+                0x1800..=0x1FFF => (addr - 0x1800) + r1_bank * bank_len,
+                _ => panic!("can't be"),
+            },
+        }
+    }
 }
 
 impl Mapper for Mapper4 {
@@ -476,7 +517,7 @@ impl Mapper for Mapper4 {
         let r4_bank = self.bank_data[4] as usize;
         let r5_bank = self.bank_data[5] as usize;
 
-        match mode {
+        let value = match mode {
             0 => match addr {
                 // 0x0000..=0x03FF
                 // 0x0400..=0x07FF
@@ -503,6 +544,17 @@ impl Mapper for Mapper4 {
                 0x1800..=0x1FFF => self.rom.chr_rom[(addr - 0x1800) as usize + r1_bank * bank_len],
                 _ => panic!("can't be"),
             },
-        }
+        };
+        let mirror = self.chr_rom_addr(addr);
+        let expected = self.rom.chr_rom[mirror as usize];
+        assert!(
+            expected == value,
+            "addr = {:04X} mirror = {:04X}, e: {:02X} a: {:02X}",
+            addr,
+            mirror,
+            expected,
+            value
+        );
+        value
     }
 }
