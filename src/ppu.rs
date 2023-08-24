@@ -312,6 +312,8 @@ impl NesPPU {
             self.cycles = self.cycles - 341;
             self.scanline += 1;
 
+            // this.Mapper.HSync(this.PpuY);
+
             if self.scanline == 241 {
                 self.status.set_vblank_status(true);
                 self.status.set_sprite_zero_hit(false);

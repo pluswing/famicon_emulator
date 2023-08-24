@@ -328,6 +328,7 @@ impl Mapper for Mapper3 {
 
 pub struct Mapper4 {
     pub rom: Rom,
+    prg_ram: Vec<u8>,
     bank_select: u8,
     bank_data: [u8; 8],
     mirroring: u8,
@@ -341,6 +342,7 @@ impl Mapper4 {
     pub fn new() -> Self {
         Mapper4 {
             rom: Rom::empty(),
+            prg_ram: vec![0xFF; 8192],
             bank_select: 0,
             bank_data: [0; 8],
             mirroring: 0,
@@ -350,43 +352,43 @@ impl Mapper4 {
             irq_enable: false,
         }
     }
-    fn chr_rom_addr(&self, addr: u16) -> u16 {
-        let bank_len = 1 * 1024;
+    fn chr_rom_addr(&self, addr: u16) -> usize {
+        let bank_len = 1 * 1024 as usize;
 
         let mode = self.bank_select & 0x80;
 
-        let r0_bank = self.bank_data[0] as u16;
-        let r1_bank = self.bank_data[1] as u16;
-        let r2_bank = self.bank_data[2] as u16;
-        let r3_bank = self.bank_data[3] as u16;
-        let r4_bank = self.bank_data[4] as u16;
-        let r5_bank = self.bank_data[5] as u16;
+        let r0_bank = self.bank_data[0] as usize;
+        let r1_bank = self.bank_data[1] as usize;
+        let r2_bank = self.bank_data[2] as usize;
+        let r3_bank = self.bank_data[3] as usize;
+        let r4_bank = self.bank_data[4] as usize;
+        let r5_bank = self.bank_data[5] as usize;
 
         match mode {
             0 => match addr {
                 // 0x0000..=0x03FF
                 // 0x0400..=0x07FF
-                0x0000..=0x07FF => addr + r0_bank * bank_len,
+                0x0000..=0x07FF => addr as usize + r0_bank * bank_len,
                 // 0x0800..=0x0BFF
                 // 0x0C00..=0x0FFF
-                0x0800..=0x0FFF => (addr - 0x0800) + r1_bank * bank_len,
-                0x1000..=0x13FF => (addr - 0x1000) + r2_bank * bank_len,
-                0x1400..=0x17FF => (addr - 0x1400) + r3_bank * bank_len,
-                0x1800..=0x1BFF => (addr - 0x1800) + r4_bank * bank_len,
-                0x1C00..=0x1FFF => (addr - 0x1C00) + r5_bank * bank_len,
+                0x0800..=0x0FFF => (addr - 0x0800) as usize + r1_bank * bank_len,
+                0x1000..=0x13FF => (addr - 0x1000) as usize + r2_bank * bank_len,
+                0x1400..=0x17FF => (addr - 0x1400) as usize + r3_bank * bank_len,
+                0x1800..=0x1BFF => (addr - 0x1800) as usize + r4_bank * bank_len,
+                0x1C00..=0x1FFF => (addr - 0x1C00) as usize + r5_bank * bank_len,
                 _ => panic!("can't be"),
             },
             _ => match addr {
-                0x0000..=0x03FF => addr + r2_bank * bank_len,
-                0x0400..=0x07FF => (addr - 0x0400) + r3_bank * bank_len,
-                0x0800..=0x0BFF => (addr - 0x0800) + r4_bank * bank_len,
-                0x0C00..=0x0FFF => (addr - 0x0C00) + r5_bank * bank_len,
+                0x0000..=0x03FF => addr as usize + r2_bank * bank_len,
+                0x0400..=0x07FF => (addr - 0x0400) as usize + r3_bank * bank_len,
+                0x0800..=0x0BFF => (addr - 0x0800) as usize + r4_bank * bank_len,
+                0x0C00..=0x0FFF => (addr - 0x0C00) as usize + r5_bank * bank_len,
                 // 0x1000..=0x13FF
                 // 0x1400..=0x17FF
-                0x1000..=0x17FF => (addr - 0x1000) + r0_bank * bank_len,
+                0x1000..=0x17FF => (addr - 0x1000) as usize + r0_bank * bank_len,
                 // 0x1800..=0x1BFF
                 // 0x1C00..=0x1FFF
-                0x1800..=0x1FFF => (addr - 0x1800) + r1_bank * bank_len,
+                0x1800..=0x1FFF => (addr - 0x1800) as usize + r1_bank * bank_len,
                 _ => panic!("can't be"),
             },
         }
@@ -411,7 +413,7 @@ impl Mapper for Mapper4 {
                     self.bank_data[(self.bank_select & 0x07) as usize] = data;
                 }
             }
-            0xA000..=0xBFFE => {
+            0xA000..=0xBFFF => {
                 if addr & 0x01 == 0 {
                     // ミラーリング ($A000-$BFFE、偶数)
                     self.mirroring = data;
@@ -420,7 +422,7 @@ impl Mapper for Mapper4 {
                     self.prg_ram_protect = data;
                 }
             }
-            0xC000..=0xDFFE => {
+            0xC000..=0xDFFF => {
                 if addr & 0x01 == 0 {
                     // IRQ ラッチ ($C000-$DFFE、偶数)
                     self.irq_latch = data;
@@ -429,7 +431,7 @@ impl Mapper for Mapper4 {
                     self.irq_reload = true;
                 }
             }
-            0xE000..=0xFFFE => {
+            0xE000..=0xFFFF => {
                 if addr & 0x01 == 0 {
                     // IRQ 無効化 ($E000-$FFFE、偶数)
                     self.irq_enable = false;
@@ -449,11 +451,22 @@ impl Mapper for Mapper4 {
         }
     }
 
-    fn write_prg_ram(&mut self, addr: u16, data: u8) {}
-    fn read_prg_ram(&self, addr: u16) -> u8 {
-        0
+    fn write_prg_ram(&mut self, addr: u16, data: u8) {
+        self.prg_ram[addr as usize - 0x6000] = data;
+
+        // FIXME　保存処理
+        let mut file = File::create("save.dat").unwrap();
+        file.write_all(&self.prg_ram).unwrap();
+        file.flush().unwrap();
     }
-    fn load_prg_ram(&mut self, raw: &Vec<u8>) {}
+
+    fn read_prg_ram(&self, addr: u16) -> u8 {
+        self.prg_ram[addr as usize - 0x6000]
+    }
+
+    fn load_prg_ram(&mut self, raw: &Vec<u8>) {
+        self.prg_ram = raw.to_vec()
+    }
 
     fn read_prg_rom(&self, addr: u16) -> u8 {
         let bank_len = 8 * 1024 as usize;
@@ -503,58 +516,22 @@ impl Mapper for Mapper4 {
     }
 
     fn write_chr_rom(&mut self, addr: u16, value: u8) {
-        self.rom.chr_rom[addr as usize] = value;
+        let mirror_addr = self.chr_rom_addr(addr);
+        self.rom.chr_rom[mirror_addr] = value;
     }
+
     fn read_chr_rom(&self, addr: u16) -> u8 {
-        let bank_len = 1 * 1024 as usize;
-
-        let mode = self.bank_select & 0x80;
-
-        let r0_bank = self.bank_data[0] as usize;
-        let r1_bank = self.bank_data[1] as usize;
-        let r2_bank = self.bank_data[2] as usize;
-        let r3_bank = self.bank_data[3] as usize;
-        let r4_bank = self.bank_data[4] as usize;
-        let r5_bank = self.bank_data[5] as usize;
-
-        let value = match mode {
-            0 => match addr {
-                // 0x0000..=0x03FF
-                // 0x0400..=0x07FF
-                0x0000..=0x07FF => self.rom.chr_rom[addr as usize + r0_bank * bank_len],
-                // 0x0800..=0x0BFF
-                // 0x0C00..=0x0FFF
-                0x0800..=0x0FFF => self.rom.chr_rom[(addr - 0x0800) as usize + r1_bank * bank_len],
-                0x1000..=0x13FF => self.rom.chr_rom[(addr - 0x1000) as usize + r2_bank * bank_len],
-                0x1400..=0x17FF => self.rom.chr_rom[(addr - 0x1400) as usize + r3_bank * bank_len],
-                0x1800..=0x1BFF => self.rom.chr_rom[(addr - 0x1800) as usize + r4_bank * bank_len],
-                0x1C00..=0x1FFF => self.rom.chr_rom[(addr - 0x1C00) as usize + r5_bank * bank_len],
-                _ => panic!("can't be"),
-            },
-            _ => match addr {
-                0x0000..=0x03FF => self.rom.chr_rom[addr as usize + r2_bank * bank_len],
-                0x0400..=0x07FF => self.rom.chr_rom[(addr - 0x0400) as usize + r3_bank * bank_len],
-                0x0800..=0x0BFF => self.rom.chr_rom[(addr - 0x0800) as usize + r4_bank * bank_len],
-                0x0C00..=0x0FFF => self.rom.chr_rom[(addr - 0x0C00) as usize + r5_bank * bank_len],
-                // 0x1000..=0x13FF
-                // 0x1400..=0x17FF
-                0x1000..=0x17FF => self.rom.chr_rom[(addr - 0x1000) as usize + r0_bank * bank_len],
-                // 0x1800..=0x1BFF
-                // 0x1C00..=0x1FFF
-                0x1800..=0x1FFF => self.rom.chr_rom[(addr - 0x1800) as usize + r1_bank * bank_len],
-                _ => panic!("can't be"),
-            },
-        };
-        let mirror = self.chr_rom_addr(addr);
-        let expected = self.rom.chr_rom[mirror as usize];
-        assert!(
-            expected == value,
-            "addr = {:04X} mirror = {:04X}, e: {:02X} a: {:02X}",
-            addr,
-            mirror,
-            expected,
-            value
-        );
-        value
+        self.rom.chr_rom[self.chr_rom_addr(addr)]
     }
+
+    /**
+     *
+  Mapper4.prototype.HSync = function(y) {
+	  if(this.MAPPER_REG[7] === 1 && y < 240 && (this.nes.IO1[0x01] & 0x08) === 0x08) {
+		  if(--this.MAPPER_REG[4] === 0)
+			  this.SetIRQ();
+		  this.MAPPER_REG[4] &= 0xFF;
+	}
+};
+     */
 }
