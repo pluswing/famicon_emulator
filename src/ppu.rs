@@ -312,7 +312,9 @@ impl NesPPU {
             self.cycles = self.cycles - 341;
             self.scanline += 1;
 
-            // this.Mapper.HSync(this.PpuY);
+            unsafe {
+                MAPPER.scanline(self.scanline, self.mask.show_background());
+            }
 
             if self.scanline == 241 {
                 self.status.set_vblank_status(true);
@@ -526,6 +528,10 @@ impl MaskRegister {
 
     pub fn show_sprites(&self) -> bool {
         self.contains(MaskRegister::SHOW_SPRITES)
+    }
+
+    pub fn show_background(&self) -> bool {
+        self.contains(MaskRegister::SHOW_BACKGROUND)
     }
 
     pub fn update(&mut self, data: u8) {

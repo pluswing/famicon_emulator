@@ -26,6 +26,8 @@ pub trait Mapper: Send {
     fn read_prg_rom(&self, addr: u16) -> u8;
     fn write_chr_rom(&mut self, addr: u16, value: u8);
     fn read_chr_rom(&self, addr: u16) -> u8;
+    fn scanline(&mut self, scanline: usize, show_background: bool);
+    fn is_irq(&mut self) -> bool;
 }
 
 pub struct Mapper0 {
@@ -336,6 +338,8 @@ pub struct Mapper4 {
     irq_latch: u8,
     irq_reload: bool,
     irq_enable: bool,
+    irq_counter: u8,
+    irq: bool,
 }
 
 impl Mapper4 {
@@ -350,6 +354,8 @@ impl Mapper4 {
             irq_latch: 0,
             irq_reload: false,
             irq_enable: false,
+            irq_counter: 0,
+            irq: false,
         }
     }
     fn chr_rom_addr(&self, addr: u16) -> usize {
@@ -426,14 +432,17 @@ impl Mapper for Mapper4 {
                 if addr & 0x01 == 0 {
                     // IRQ ラッチ ($C000-$DFFE、偶数)
                     self.irq_latch = data;
+                    self.irq_counter = data;
                 } else {
                     // IRQ リロード ($C001-$DFFF、奇数)
-                    self.irq_reload = true;
+                    self.irq_counter = self.irq_latch;
                 }
             }
             0xE000..=0xFFFF => {
                 if addr & 0x01 == 0 {
                     // IRQ 無効化 ($E000-$FFFE、偶数)
+                    self.irq_counter = self.irq_latch;
+                    self.irq = false;
                     self.irq_enable = false;
                 } else {
                     // IRQ イネーブル ($E001-$FFFF、奇数)
@@ -524,14 +533,20 @@ impl Mapper for Mapper4 {
         self.rom.chr_rom[self.chr_rom_addr(addr)]
     }
 
-    /**
-     *
-  Mapper4.prototype.HSync = function(y) {
-	  if(this.MAPPER_REG[7] === 1 && y < 240 && (this.nes.IO1[0x01] & 0x08) === 0x08) {
-		  if(--this.MAPPER_REG[4] === 0)
-			  this.SetIRQ();
-		  this.MAPPER_REG[4] &= 0xFF;
-	}
-};
-     */
+    fn scanline(&mut self, scanline: usize, show_background: bool) {
+        if self.irq_enable && scanline <= 240 && show_background {
+            if self.irq_counter > 0 {
+                self.irq_counter -= 1;
+            }
+            if self.irq_counter == 0 {
+                self.irq = true;
+            }
+        }
+    }
+
+    fn is_irq(&mut self) -> bool {
+        let res = self.irq;
+        self.irq = false;
+        res
+    }
 }

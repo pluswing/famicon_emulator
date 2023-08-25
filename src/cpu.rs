@@ -1,6 +1,7 @@
 use log::{debug, info, trace};
 
 use crate::opscodes::{call, CPU_OPS_CODES};
+use crate::MAPPER;
 
 use crate::bus::{Bus, Mem};
 
@@ -259,6 +260,8 @@ impl<'a> CPU<'a> {
             }
 
             if self.bus.poll_apu_irq() {
+                self.apu_irq();
+            } else if unsafe { MAPPER.is_irq() } {
                 self.apu_irq();
             }
 
