@@ -68,6 +68,10 @@ impl Mapper for Mapper0 {
     fn read_chr_rom(&self, addr: u16) -> u8 {
         self.rom.chr_rom[addr as usize]
     }
+    fn scanline(&mut self, scanline: usize, show_background: bool) {}
+    fn is_irq(&mut self) -> bool {
+        false
+    }
 }
 
 pub struct Mapper1 {
@@ -219,6 +223,10 @@ impl Mapper for Mapper1 {
     fn read_chr_rom(&self, addr: u16) -> u8 {
         self.rom.chr_rom[addr as usize]
     }
+    fn scanline(&mut self, scanline: usize, show_background: bool) {}
+    fn is_irq(&mut self) -> bool {
+        false
+    }
 }
 
 pub struct Mapper2 {
@@ -278,6 +286,10 @@ impl Mapper for Mapper2 {
     fn read_chr_rom(&self, addr: u16) -> u8 {
         self.rom.chr_rom[addr as usize]
     }
+    fn scanline(&mut self, scanline: usize, show_background: bool) {}
+    fn is_irq(&mut self) -> bool {
+        false
+    }
 }
 
 pub struct Mapper3 {
@@ -325,6 +337,10 @@ impl Mapper for Mapper3 {
         let bank_len = 8 * 1024 as usize;
         let bank = self.bank_select & 0x03;
         self.rom.chr_rom[(addr as usize + bank_len * bank as usize) as usize]
+    }
+    fn scanline(&mut self, scanline: usize, show_background: bool) {}
+    fn is_irq(&mut self) -> bool {
+        false
     }
 }
 
@@ -435,13 +451,13 @@ impl Mapper for Mapper4 {
                     self.irq_counter = data;
                 } else {
                     // IRQ リロード ($C001-$DFFF、奇数)
-                    self.irq_counter = self.irq_latch;
+                    self.irq_reload = true;
+                    self.irq_counter = 0;
                 }
             }
             0xE000..=0xFFFF => {
                 if addr & 0x01 == 0 {
                     // IRQ 無効化 ($E000-$FFFE、偶数)
-                    self.irq_counter = self.irq_latch;
                     self.irq = false;
                     self.irq_enable = false;
                 } else {
@@ -534,11 +550,14 @@ impl Mapper for Mapper4 {
     }
 
     fn scanline(&mut self, scanline: usize, show_background: bool) {
-        if self.irq_enable && scanline <= 240 && show_background {
-            if self.irq_counter > 0 {
+        if scanline <= 240 && show_background {
+            if self.irq_counter == 0 || self.irq_reload {
+                self.irq_counter = self.irq_latch;
+                self.irq_reload = false;
+            } else {
                 self.irq_counter -= 1;
             }
-            if self.irq_counter == 0 {
+            if self.irq_counter == 0 && self.irq_enable {
                 self.irq = true;
             }
         }

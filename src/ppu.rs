@@ -313,7 +313,10 @@ impl NesPPU {
             self.scanline += 1;
 
             unsafe {
-                MAPPER.scanline(self.scanline, self.mask.show_background());
+                MAPPER.scanline(
+                    self.scanline,
+                    self.mask.show_background() || self.mask.show_sprites(),
+                );
             }
 
             if self.scanline == 241 {
