@@ -84,13 +84,14 @@ fn main() {
     // let rom = load_rom("rom/Dragon Quest II - Akuryou no Kamigami (Japan).nes");
     let rom = load_rom("rom/Dragon Quest (Japan).nes");
     let rom = load_rom("rom/Dragon Quest IV - Michibikareshi Monotachi (Japan) (Rev 1).nes");
-    let rom = load_rom("rom/Yoshi no Tamago (Japan).nes");
 
     // let rom = mario_rom();
     // let rom = load_rom("rom/KiraKiraStarNightDX.nes");
     let rom = load_rom("rom/Mother (Japan).nes");
     let rom = load_rom("rom/Super Mario Bros. 3 (Japan) (Rev 1).nes");
     let rom = load_rom("rom/Final Fantasy III (Japan).nes");
+
+    let rom = load_rom("rom/Yoshi no Tamago (Japan).nes");
 
     info!(
         "ROM: mapper={}, mirroring={:?} chr_ram={}",
