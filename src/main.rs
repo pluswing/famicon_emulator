@@ -80,10 +80,8 @@ fn main() {
     key_map.insert(Keycode::A, joypad::JoypadButton::BUTTON_A);
     key_map.insert(Keycode::S, joypad::JoypadButton::BUTTON_B);
 
-    let rom = load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes");
     // let rom = load_rom("rom/Dragon Quest II - Akuryou no Kamigami (Japan).nes");
     let rom = load_rom("rom/Dragon Quest (Japan).nes");
-    let rom = load_rom("rom/Dragon Quest IV - Michibikareshi Monotachi (Japan) (Rev 1).nes");
 
     // let rom = mario_rom();
     // let rom = load_rom("rom/KiraKiraStarNightDX.nes");
@@ -91,11 +89,13 @@ fn main() {
     let rom = load_rom("rom/Super Mario Bros. 3 (Japan) (Rev 1).nes");
     let rom = load_rom("rom/Final Fantasy III (Japan).nes");
 
+    let rom = load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes");
+    let rom = load_rom("rom/Dragon Quest IV - Michibikareshi Monotachi (Japan) (Rev 1).nes");
     let rom = load_rom("rom/Yoshi no Tamago (Japan).nes");
 
     info!(
-        "ROM: mapper={}, mirroring={:?} chr_ram={}",
-        rom.mapper, rom.screen_mirroring, rom.is_chr_ram
+        "ROM: mapper={}, submapper={}, mirroring={:?} chr_ram={}",
+        rom.mapper, rom.submapper, rom.screen_mirroring, rom.is_chr_ram
     );
 
     unsafe {

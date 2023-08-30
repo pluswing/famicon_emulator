@@ -13,6 +13,7 @@ pub struct Rom {
     pub prg_rom: Vec<u8>,
     pub chr_rom: Vec<u8>,
     pub mapper: u8,
+    pub submapper: u8,
     pub screen_mirroring: Mirroring,
     pub is_chr_ram: bool,
 }
@@ -24,6 +25,7 @@ impl Rom {
         }
 
         let mapper = (raw[7] & 0b1111_0000) | (raw[6] >> 4);
+        let submapper = raw[8] & 0xF0 >> 4;
 
         // let ines_ver = (raw[7] >> 2) & 0b11;
         // if ines_ver != 0 {
@@ -46,6 +48,7 @@ impl Rom {
         let prg_rom_start = 16 + if skip_trainer { 512 } else { 0 };
         let chr_rom_start = prg_rom_start + prg_rom_size;
 
+        // これは、NES1.0の仕様なので、2.0のspecに書き換える必要あり。
         let chr_rom = if chr_rom_size == 0 {
             // chr_rom_size=0の場合、8KBのCHR_RAMが存在する
             let blank_chr_ram: Vec<u8> = vec![0; CHR_ROM_PAGE_SIZE];
@@ -58,6 +61,7 @@ impl Rom {
             prg_rom: raw[prg_rom_start..(prg_rom_start + prg_rom_size)].to_vec(),
             chr_rom: chr_rom,
             mapper: mapper,
+            submapper: submapper,
             screen_mirroring: screen_mirroring,
             is_chr_ram: chr_rom_size == 0,
         })
@@ -68,6 +72,7 @@ impl Rom {
             prg_rom: vec![],
             chr_rom: vec![],
             mapper: 0,
+            submapper: 0,
             screen_mirroring: Mirroring::VERTICAL,
             is_chr_ram: false,
         };

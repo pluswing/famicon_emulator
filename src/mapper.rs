@@ -5,7 +5,14 @@ use std::io::{self, BufReader, Read, Write};
 pub fn create_mapper(rom: Rom) -> Box<dyn Mapper> {
     let mut mapper: Box<dyn Mapper> = match rom.mapper {
         0 => Box::new(Mapper0::new()),
-        1 => Box::new(Mapper1::new()),
+        1 => {
+            // DQ3, 4を動かすためのhack.
+            if rom.is_chr_ram {
+                Box::new(SxRom::new())
+            } else {
+                Box::new(Mapper1::new())
+            }
+        }
         2 => Box::new(Mapper2::new()),
         3 => Box::new(Mapper3::new()),
         4 => Box::new(Mapper4::new()),
@@ -95,7 +102,7 @@ impl Mapper1 {
             shift_register: 0x10,
             shift_count: 0,
 
-            control: 0,
+            control: 0x0C,
             chr_bank0: 0,
             chr_bank1: 0,
             prg_bank: 0,
