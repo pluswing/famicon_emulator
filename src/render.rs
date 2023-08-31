@@ -29,23 +29,26 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
     let scroll_x = (ppu.scroll.scroll_x) as usize;
     let scroll_y = (ppu.scroll.scroll_y) as usize;
     let mirroring = unsafe { MAPPER.mirroring() };
-    let (main_name_table, second_name_table) = match (&mirroring, ppu.ctrl.nametable_addr()) {
-        (Mirroring::VERTICAL, 0x2000) | (Mirroring::VERTICAL, 0x2800) => {
-            (&ppu.vram[0x000..0x400], &ppu.vram[0x400..0x800])
-        }
-        (Mirroring::VERTICAL, 0x2400) | (Mirroring::VERTICAL, 0x2C00) => {
-            (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
-        }
-        (Mirroring::HORIZONTAL, 0x2000) | (Mirroring::HORIZONTAL, 0x2400) => {
-            (&ppu.vram[0x000..0x400], &ppu.vram[0x400..0x800])
-        }
-        (Mirroring::HORIZONTAL, 0x2800) | (Mirroring::HORIZONTAL, 0x2C00) => {
-            (&ppu.vram[0x400..0x800], &ppu.vram[0x000..0x400])
-        }
-        (_, _) => {
-            panic!("Not supported mirroring type {:?}", mirroring);
-        }
-    };
+    let vram_a = &ppu.vram[0x000..0x400];
+    let vram_b = &ppu.vram[0x400..0x800];
+    let (top_left, top_right, bottom_left, bottom_right) =
+        match (&mirroring, ppu.ctrl.nametable_addr()) {
+            (Mirroring::VERTICAL, 0x2000) | (Mirroring::VERTICAL, 0x2800) => {
+                (vram_a, vram_b, vram_a, vram_b)
+            }
+            (Mirroring::VERTICAL, 0x2400) | (Mirroring::VERTICAL, 0x2C00) => {
+                (vram_b, vram_a, vram_b, vram_a)
+            }
+            (Mirroring::HORIZONTAL, 0x2000) | (Mirroring::HORIZONTAL, 0x2400) => {
+                (vram_a, vram_a, vram_b, vram_b)
+            }
+            (Mirroring::HORIZONTAL, 0x2800) | (Mirroring::HORIZONTAL, 0x2C00) => {
+                (vram_b, vram_b, vram_a, vram_a)
+            }
+            (_, _) => {
+                panic!("Not supported mirroring type {:?}", mirroring);
+            }
+        };
 
     let screen_w = 256;
     let screen_h = 240;
@@ -54,40 +57,40 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
     render_name_table(
         ppu,
         frame,
-        main_name_table,
+        top_left,
         Rect::new(scroll_x, scroll_y, screen_w, screen_h),
         -(scroll_x as isize),
         -(scroll_y as isize),
-    );
-
-    // 右下
-    render_name_table(
-        ppu,
-        frame,
-        second_name_table,
-        Rect::new(0, 0, scroll_x, scroll_y),
-        (screen_w - scroll_x) as isize,
-        (screen_h - scroll_y) as isize,
-    );
-
-    // 左下
-    render_name_table(
-        ppu,
-        frame,
-        main_name_table,
-        Rect::new(scroll_x, 0, screen_w, scroll_y),
-        -(scroll_x as isize),
-        (screen_h - scroll_y) as isize,
     );
 
     // 右上
     render_name_table(
         ppu,
         frame,
-        second_name_table,
+        top_right,
         Rect::new(0, scroll_y, scroll_x, screen_h),
         (screen_w - scroll_x) as isize,
         -(scroll_y as isize),
+    );
+
+    // 左下
+    render_name_table(
+        ppu,
+        frame,
+        bottom_left,
+        Rect::new(scroll_x, 0, screen_w, scroll_y),
+        -(scroll_x as isize),
+        (screen_h - scroll_y) as isize,
+    );
+
+    // 右下
+    render_name_table(
+        ppu,
+        frame,
+        bottom_right,
+        Rect::new(0, 0, scroll_x, scroll_y),
+        (screen_w - scroll_x) as isize,
+        (screen_h - scroll_y) as isize,
     );
 
     // draw sprites
