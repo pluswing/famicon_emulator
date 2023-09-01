@@ -85,13 +85,13 @@ fn main() {
 
     // let rom = mario_rom();
     // let rom = load_rom("rom/KiraKiraStarNightDX.nes");
-    let rom = load_rom("rom/Mother (Japan).nes");
-    let rom = load_rom("rom/Final Fantasy III (Japan).nes");
 
     let rom = load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes");
     let rom = load_rom("rom/Dragon Quest IV - Michibikareshi Monotachi (Japan) (Rev 1).nes");
     let rom = load_rom("rom/Yoshi no Tamago (Japan).nes");
     let rom = load_rom("rom/Super Mario Bros. 3 (Japan) (Rev 1).nes");
+    let rom = load_rom("rom/Final Fantasy III (Japan).nes");
+    let rom = load_rom("rom/Mother (Japan).nes");
 
     info!(
         "ROM: mapper={}, submapper={}, mirroring={:?} chr_ram={}",
@@ -106,42 +106,43 @@ fn main() {
     let mut now = Instant::now();
     let interval = 1000 * 1000 * 1000 / 60;
 
-    let mut frame = Frame::new();
     let apu = NesAPU::new(&sdl_context);
-    let bus = Bus::new(apu, move |ppu: &NesPPU, joypad1: &mut Joypad| {
-        render::render(ppu, &mut frame);
-        texture.update(None, &frame.data, 256 * 3).unwrap();
+    let bus = Bus::new(
+        apu,
+        move |ppu: &NesPPU, joypad1: &mut Joypad, frame: &Frame| {
+            texture.update(None, &frame.data, 256 * 3).unwrap();
 
-        canvas.copy(&texture, None, None).unwrap();
+            canvas.copy(&texture, None, None).unwrap();
 
-        canvas.present();
-        for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit { .. }
-                | Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => std::process::exit(0),
-                Event::KeyDown { keycode, .. } => {
-                    if let Some(key) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
-                        joypad1.set_button_pressed_status(*key, true);
+            canvas.present();
+            for event in event_pump.poll_iter() {
+                match event {
+                    Event::Quit { .. }
+                    | Event::KeyDown {
+                        keycode: Some(Keycode::Escape),
+                        ..
+                    } => std::process::exit(0),
+                    Event::KeyDown { keycode, .. } => {
+                        if let Some(key) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
+                            joypad1.set_button_pressed_status(*key, true);
+                        }
                     }
-                }
-                Event::KeyUp { keycode, .. } => {
-                    if let Some(key) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
-                        joypad1.set_button_pressed_status(*key, false);
+                    Event::KeyUp { keycode, .. } => {
+                        if let Some(key) = key_map.get(&keycode.unwrap_or(Keycode::Ampersand)) {
+                            joypad1.set_button_pressed_status(*key, false);
+                        }
                     }
+                    _ => { /* do nothing */ }
                 }
-                _ => { /* do nothing */ }
             }
-        }
 
-        let time = now.elapsed().as_nanos();
-        if time < interval {
-            sleep(Duration::from_nanos((interval - time) as u64));
-        }
-        now = Instant::now();
-    });
+            let time = now.elapsed().as_nanos();
+            if time < interval {
+                sleep(Duration::from_nanos((interval - time) as u64));
+            }
+            now = Instant::now();
+        },
+    );
 
     let mut cpu = CPU::new(bus);
 

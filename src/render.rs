@@ -24,7 +24,7 @@ impl Rect {
     }
 }
 
-pub fn render(ppu: &NesPPU, frame: &mut Frame) {
+pub fn render(ppu: &NesPPU, frame: &mut Frame, scanline: usize) {
     // draw background
     let scroll_x = (ppu.scroll.scroll_x) as usize;
     let scroll_y = (ppu.scroll.scroll_y) as usize;
@@ -53,6 +53,9 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
     let screen_w = 256;
     let screen_h = 240;
 
+    // 描画範囲
+    let draw_rect = Rect::new(0, scanline - 8, screen_w, scanline);
+
     // 左上
     render_name_table(
         ppu,
@@ -61,6 +64,7 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
         Rect::new(scroll_x, scroll_y, screen_w, screen_h),
         -(scroll_x as isize),
         -(scroll_y as isize),
+        &draw_rect,
     );
 
     // 右上
@@ -71,6 +75,7 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
         Rect::new(0, scroll_y, scroll_x, screen_h),
         (screen_w - scroll_x) as isize,
         -(scroll_y as isize),
+        &draw_rect,
     );
 
     // 左下
@@ -81,6 +86,7 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
         Rect::new(scroll_x, 0, screen_w, scroll_y),
         -(scroll_x as isize),
         (screen_h - scroll_y) as isize,
+        &draw_rect,
     );
 
     // 右下
@@ -91,6 +97,7 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame) {
         Rect::new(0, 0, scroll_x, scroll_y),
         (screen_w - scroll_x) as isize,
         (screen_h - scroll_y) as isize,
+        &draw_rect,
     );
 
     // draw sprites
@@ -180,6 +187,7 @@ fn render_name_table(
     view_port: Rect,
     shift_x: isize,
     shift_y: isize,
+    draw_rect: &Rect,
 ) {
     let bank = ppu.ctrl.background_pattern_addr();
     let attribute_table = &name_table[0x03C0..0x0400];
@@ -219,11 +227,15 @@ fn render_name_table(
                     && pixel_y >= view_port.y1
                     && pixel_y < view_port.y2
                 {
-                    frame.set_pixel(
-                        (shift_x + pixel_x as isize) as usize,
-                        (shift_y + pixel_y as isize) as usize,
-                        rgb,
-                    )
+                    let x = (shift_x + pixel_x as isize) as usize;
+                    let y = (shift_y + pixel_y as isize) as usize;
+                    if x >= draw_rect.x1
+                        && x < draw_rect.x2
+                        && y >= draw_rect.y1
+                        && y < draw_rect.y2
+                    {
+                        frame.set_pixel(x, y, rgb)
+                    }
                 }
             }
         }

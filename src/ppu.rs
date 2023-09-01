@@ -1,7 +1,9 @@
 use bitflags::bitflags;
 use log::{debug, info, trace};
 
+use crate::frame::Frame;
 use crate::mapper::Mapper;
+use crate::render::{self, render};
 use crate::{cpu::IN_TRACE, rom::Mirroring, MAPPER};
 
 pub struct NesPPU {
@@ -302,7 +304,7 @@ impl NesPPU {
         }
     }
 
-    pub fn tick(&mut self, cycles: u8) -> bool {
+    pub fn tick(&mut self, cycles: u8, frame: &mut Frame) -> bool {
         self.cycles += cycles as usize;
         if self.cycles >= 341 {
             if self.is_sprite_zero_hit(self.cycles) {
@@ -311,6 +313,10 @@ impl NesPPU {
 
             self.cycles = self.cycles - 341;
             self.scanline += 1;
+
+            if self.scanline % 8 == 0 {
+                render(&self, frame, self.scanline);
+            }
 
             unsafe {
                 MAPPER.scanline(

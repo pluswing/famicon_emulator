@@ -1,3 +1,4 @@
+use crate::frame::Frame;
 use crate::joypad::Joypad;
 use crate::mapper::Mapper;
 use crate::ppu::NesPPU;
@@ -8,23 +9,25 @@ pub struct Bus<'call> {
     cpu_vram: [u8; 2048],
     // prg_rom: Vec<u8>,
     ppu: NesPPU,
+    frame: Frame,
     joypad1: Joypad,
     joypad2: Joypad,
     apu: NesAPU,
 
     cycles: usize,
-    gameloop_callback: Box<dyn FnMut(&NesPPU, &mut Joypad) + 'call>,
+    gameloop_callback: Box<dyn FnMut(&NesPPU, &mut Joypad, &Frame) + 'call>,
 }
 
 impl<'a> Bus<'a> {
     pub fn new<'call, F>(apu: NesAPU, gameloop_callback: F) -> Bus<'call>
     where
-        F: FnMut(&NesPPU, &mut Joypad) + 'call,
+        F: FnMut(&NesPPU, &mut Joypad, &Frame) + 'call,
     {
         let ppu = NesPPU::new();
         Bus {
             cpu_vram: [0; 2048],
             ppu: ppu,
+            frame: Frame::new(),
             joypad1: Joypad::new(),
             joypad2: Joypad::new(),
             apu: apu,
@@ -37,13 +40,13 @@ impl<'a> Bus<'a> {
         self.cycles += cycles as usize;
 
         let nmi_before = self.ppu.nmi_interrupt.is_some();
-        self.ppu.tick(cycles * 3);
+        self.ppu.tick(cycles * 3, &mut self.frame);
         let nmi_after = self.ppu.nmi_interrupt.is_some();
 
         self.apu.tick(cycles);
 
         if !nmi_before && nmi_after {
-            (self.gameloop_callback)(&self.ppu, &mut self.joypad1);
+            (self.gameloop_callback)(&self.ppu, &mut self.joypad1, &self.frame);
         }
     }
 
@@ -191,7 +194,7 @@ impl Mem for Bus<'_> {
                 self.ppu.write_to_oam_dma(values);
                 // Not counting the OAMDMA write tick, the above procedure takes 513 CPU cycles (+1 on odd CPU cycles)
                 for _ in 0..513 {
-                    self.ppu.tick(1);
+                    self.ppu.tick(1, &mut self.frame);
                 }
             }
             0x6000..=0x7FFF => unsafe { MAPPER.write_prg_ram(addr, data) },
