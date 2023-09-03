@@ -8,7 +8,20 @@ pub fn load_rom(path: &str) -> Rom {
     let mut buffer = vec![0; metadata.len() as usize];
     f.read(&mut buffer).expect("buffer overflow");
     let rom = Rom::new(&buffer).expect("load error");
+
+    // rom.save_data_file = path.replace(".nes", ".save")
+    // save = load_save_data(rom.save_data_file)
+    // rom.save_data = rom;
+
     rom
+}
+
+fn load_save_data(path: &str) {
+    let mut f = File::open(path).expect("no save file found");
+    let metadata = std::fs::metadata(path).expect("unable to read metadata");
+    let mut buffer = vec![0; metadata.len() as usize];
+    f.read(&mut buffer).expect("buffer overflow");
+    // unsafe { MAPPER.load_prg_ram(&buffer) }
 }
 
 pub mod test {

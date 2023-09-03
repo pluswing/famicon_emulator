@@ -312,7 +312,7 @@ impl Mapper for SxRom {
         self.prg_ram[addr as usize - 0x6000] = data;
 
         // FIXME　保存処理
-        let mut file = File::create("save.dat").unwrap();
+        let mut file = File::create(self.rom.save_file_path).unwrap();
         file.write_all(&self.prg_ram).unwrap();
         file.flush().unwrap();
     }

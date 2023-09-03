@@ -59,9 +59,14 @@ fn main() {
     let window = video_subsystem
         .window("NES Emulator", (256.0 * 2.0) as u32, (240.0 * 2.0) as u32)
         .position_centered()
+        .opengl()
         .build()
         .unwrap();
-    let mut canvas = window.into_canvas().present_vsync().build().unwrap();
+    let mut canvas = window
+        .into_canvas()
+        .index(find_sdl_gl_driver().unwrap())
+        .build()
+        .unwrap();
     let mut event_pump = sdl_context.event_pump().unwrap();
     canvas.set_scale(2.0, 2.0).unwrap();
 
@@ -89,8 +94,8 @@ fn main() {
     let rom = load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes");
     let rom = load_rom("rom/Dragon Quest IV - Michibikareshi Monotachi (Japan) (Rev 1).nes");
     let rom = load_rom("rom/Yoshi no Tamago (Japan).nes");
-    let rom = load_rom("rom/Super Mario Bros. 3 (Japan) (Rev 1).nes");
     let rom = load_rom("rom/Final Fantasy III (Japan).nes");
+    let rom = load_rom("rom/Super Mario Bros. 3 (Japan) (Rev 1).nes");
     let rom = load_rom("rom/Mother (Japan).nes");
 
     info!(
@@ -115,6 +120,7 @@ fn main() {
             canvas.copy(&texture, None, None).unwrap();
 
             canvas.present();
+
             for event in event_pump.poll_iter() {
                 match event {
                     Event::Quit { .. }
@@ -182,12 +188,13 @@ fn main() {
     */
 }
 
-fn load_save_data(path: &str) {
-    let mut f = File::open(path).expect("no save file found");
-    let metadata = std::fs::metadata(path).expect("unable to read metadata");
-    let mut buffer = vec![0; metadata.len() as usize];
-    f.read(&mut buffer).expect("buffer overflow");
-    unsafe { MAPPER.load_prg_ram(&buffer) }
+fn find_sdl_gl_driver() -> Option<u32> {
+    for (index, item) in sdl2::render::drivers().enumerate() {
+        if item.name == "opengl" {
+            return Some(index as u32);
+        }
+    }
+    None
 }
 
 fn handle_user_input(cpu: &mut CPU, event_pump: &mut EventPump) {
