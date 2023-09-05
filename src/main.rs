@@ -94,8 +94,8 @@ fn main() {
     let rom = load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes");
     let rom = load_rom("rom/Dragon Quest IV - Michibikareshi Monotachi (Japan) (Rev 1).nes");
     let rom = load_rom("rom/Yoshi no Tamago (Japan).nes");
-    let rom = load_rom("rom/Final Fantasy III (Japan).nes");
     let rom = load_rom("rom/Super Mario Bros. 3 (Japan) (Rev 1).nes");
+    let rom = load_rom("rom/Final Fantasy III (Japan).nes");
     let rom = load_rom("rom/Mother (Japan).nes");
 
     info!(
@@ -106,7 +106,6 @@ fn main() {
     unsafe {
         *MAPPER = create_mapper(rom);
     }
-    // load_save_data("save_dq4.dat");
 
     let mut now = Instant::now();
     let interval = 1000 * 1000 * 1000 / 60;

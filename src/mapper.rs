@@ -211,7 +211,8 @@ impl Mapper for Mapper1 {
     }
 
     fn set_rom(&mut self, rom: Rom) {
-        self.rom = rom
+        self.load_prg_ram(&rom.save_data);
+        self.rom = rom;
     }
     fn is_chr_ram(&mut self) -> bool {
         self.rom.is_chr_ram
@@ -273,7 +274,8 @@ impl SxRom {
 
 impl Mapper for SxRom {
     fn set_rom(&mut self, rom: Rom) {
-        self.rom = rom
+        self.load_prg_ram(&rom.save_data);
+        self.rom = rom;
     }
     fn is_chr_ram(&mut self) -> bool {
         self.rom.is_chr_ram
@@ -312,7 +314,7 @@ impl Mapper for SxRom {
         self.prg_ram[addr as usize - 0x6000] = data;
 
         // FIXME　保存処理
-        let mut file = File::create(self.rom.save_file_path).unwrap();
+        let mut file = File::create(self.rom.save_data_file.as_str()).unwrap();
         file.write_all(&self.prg_ram).unwrap();
         file.flush().unwrap();
     }
@@ -322,6 +324,9 @@ impl Mapper for SxRom {
     }
 
     fn load_prg_ram(&mut self, raw: &Vec<u8>) {
+        if raw.is_empty() {
+            return;
+        }
         self.prg_ram = raw.to_vec()
     }
 
@@ -581,7 +586,8 @@ impl Mapper4 {
 
 impl Mapper for Mapper4 {
     fn set_rom(&mut self, rom: Rom) {
-        self.rom = rom
+        self.load_prg_ram(&rom.save_data);
+        self.rom = rom;
     }
     fn is_chr_ram(&mut self) -> bool {
         self.rom.is_chr_ram
@@ -640,8 +646,7 @@ impl Mapper for Mapper4 {
     fn write_prg_ram(&mut self, addr: u16, data: u8) {
         self.prg_ram[addr as usize - 0x6000] = data;
 
-        // FIXME　保存処理
-        let mut file = File::create("save.dat").unwrap();
+        let mut file = File::create(self.rom.save_data_file.as_str()).unwrap();
         file.write_all(&self.prg_ram).unwrap();
         file.flush().unwrap();
     }
@@ -651,6 +656,9 @@ impl Mapper for Mapper4 {
     }
 
     fn load_prg_ram(&mut self, raw: &Vec<u8>) {
+        if raw.is_empty() {
+            return;
+        }
         self.prg_ram = raw.to_vec()
     }
 
