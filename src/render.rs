@@ -25,7 +25,11 @@ impl Rect {
 }
 
 pub fn render(ppu: &NesPPU, frame: &mut Frame, scanline: usize) {
-    // draw background
+    draw_background(ppu, frame, scanline);
+    draw_sprites(ppu, frame, scanline);
+}
+
+pub fn draw_background(ppu: &NesPPU, frame: &mut Frame, scanline: usize) {
     let scroll_x = (ppu.scroll.scroll_x) as usize;
     let scroll_y = (ppu.scroll.scroll_y) as usize;
     let mirroring = unsafe { MAPPER.mirroring() };
@@ -99,49 +103,60 @@ pub fn render(ppu: &NesPPU, frame: &mut Frame, scanline: usize) {
         (screen_h - scroll_y) as isize,
         &draw_rect,
     );
+}
 
-    // draw sprites
+pub fn draw_sprites(ppu: &NesPPU, frame: &mut Frame, scanline: usize) {
     // TODO 8x16 mode
+    // if ppu.ctrl.is_sprite_8x16_mode() {
     for i in (0..ppu.oam_data.len()).step_by(4).rev() {
         let tile_y = ppu.oam_data[i] as usize;
         let tile_idx = ppu.oam_data[i + 1] as u16;
         let attr = ppu.oam_data[i + 2];
         let tile_x = ppu.oam_data[i + 3] as usize;
 
-        let flip_vertical = (attr >> 7 & 1) == 1;
-        let flip_horizontal = (attr >> 6 & 1) == 1;
-        let palette_idx = attr & 0b11;
-        let sprite_palette = sprite_palette(ppu, tile_y, palette_idx);
+        let start = if ppu.ctrl.is_sprite_8x16_mode() {
+            let bank = if (tile_idx & 0x01) == 0 { 0 } else { 0x1000 };
+            bank + ((tile_idx & 0xFE) >> 1) * 16
+        } else {
+            let bank: u16 = ppu.ctrl.sprite_pattern_addr();
+            bank + tile_idx * 16
+        };
 
-        let bank: u16 = ppu.ctrl.sprite_pattern_addr();
+        draw_tile(ppu, frame, start, tile_x, tile_y, attr);
+    }
+}
 
-        let start = bank + tile_idx * 16;
-        let mut tile: [u8; 16] = [0; 16];
-        for i in 0..=15 {
-            tile[i] = unsafe { MAPPER.read_chr_rom(start + i as u16) }
-        }
+fn draw_tile(ppu: &NesPPU, frame: &mut Frame, start: u16, tile_x: usize, tile_y: usize, attr: u8) {
+    let flip_vertical = (attr >> 7 & 1) == 1;
+    let flip_horizontal = (attr >> 6 & 1) == 1;
+    let palette_idx = attr & 0b11;
+    let sprite_palette = sprite_palette(ppu, tile_y, palette_idx);
 
-        for y in 0..=7 {
-            let mut upper = tile[y];
-            let mut lower = tile[y + 8];
-            'ololo: for x in (0..=7).rev() {
-                let value = (1 & lower) << 1 | (1 & upper);
-                upper = upper >> 1;
-                lower = lower >> 1;
-                let rgb = match value {
-                    0 => continue 'ololo, // skip coloring the pixel
-                    1 => palette::SYSTEM_PALLETE[sprite_palette[1] as usize],
-                    2 => palette::SYSTEM_PALLETE[sprite_palette[2] as usize],
-                    3 => palette::SYSTEM_PALLETE[sprite_palette[3] as usize],
-                    _ => panic!("can't be"),
-                };
+    let mut tile: [u8; 16] = [0; 16];
+    for i in 0..=15 {
+        tile[i] = unsafe { MAPPER.read_chr_rom(start + i as u16) }
+    }
 
-                match (flip_horizontal, flip_vertical) {
-                    (false, false) => frame.set_pixel(tile_x + x, tile_y + y, rgb),
-                    (true, false) => frame.set_pixel(tile_x + 7 - x, tile_y + y, rgb),
-                    (false, true) => frame.set_pixel(tile_x + x, tile_y + 7 - y, rgb),
-                    (true, true) => frame.set_pixel(tile_x + 7 - x, tile_y + 7 - y, rgb),
-                }
+    for y in 0..=7 {
+        let mut upper = tile[y];
+        let mut lower = tile[y + 8];
+        'ololo: for x in (0..=7).rev() {
+            let value = (1 & lower) << 1 | (1 & upper);
+            upper = upper >> 1;
+            lower = lower >> 1;
+            let rgb = match value {
+                0 => continue 'ololo, // skip coloring the pixel
+                1 => palette::SYSTEM_PALLETE[sprite_palette[1] as usize],
+                2 => palette::SYSTEM_PALLETE[sprite_palette[2] as usize],
+                3 => palette::SYSTEM_PALLETE[sprite_palette[3] as usize],
+                _ => panic!("can't be"),
+            };
+
+            match (flip_horizontal, flip_vertical) {
+                (false, false) => frame.set_pixel(tile_x + x, tile_y + y, rgb),
+                (true, false) => frame.set_pixel(tile_x + 7 - x, tile_y + y, rgb),
+                (false, true) => frame.set_pixel(tile_x + x, tile_y + 7 - y, rgb),
+                (true, true) => frame.set_pixel(tile_x + 7 - x, tile_y + 7 - y, rgb),
             }
         }
     }

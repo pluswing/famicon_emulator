@@ -456,8 +456,6 @@ impl ControlRegister {
     }
 
     pub fn sprite_pattern_addr(&self) -> u16 {
-        // ignored in 8x16 mode
-
         if !self.contains(ControlRegister::SPRITE_PATTERN_ADDR) {
             0x0000
         } else {
