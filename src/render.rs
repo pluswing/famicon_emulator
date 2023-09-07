@@ -1,10 +1,12 @@
 use log::{debug, info};
 
 use crate::frame::Frame;
-use crate::mapper::Mapper;
 use crate::ppu::NesPPU;
 use crate::rom::Mirroring;
 use crate::{palette, MAPPER};
+
+const SCREEN_W: usize = 256;
+const SCREEN_H: usize = 240;
 
 struct Rect {
     x1: usize,
@@ -25,11 +27,14 @@ impl Rect {
 }
 
 pub fn render(ppu: &NesPPU, frame: &mut Frame, scanline: usize) {
-    draw_background(ppu, frame, scanline);
-    draw_sprites(ppu, frame, scanline);
+    // 描画範囲
+    let draw_rect = Rect::new(0, scanline - 8, SCREEN_W, scanline);
+
+    draw_background(ppu, frame, &draw_rect);
+    draw_sprites(ppu, frame, &draw_rect);
 }
 
-pub fn draw_background(ppu: &NesPPU, frame: &mut Frame, scanline: usize) {
+fn draw_background(ppu: &NesPPU, frame: &mut Frame, draw_rect: &Rect) {
     let scroll_x = (ppu.scroll.scroll_x) as usize;
     let scroll_y = (ppu.scroll.scroll_y) as usize;
     let mirroring = unsafe { MAPPER.mirroring() };
@@ -54,18 +59,12 @@ pub fn draw_background(ppu: &NesPPU, frame: &mut Frame, scanline: usize) {
             }
         };
 
-    let screen_w = 256;
-    let screen_h = 240;
-
-    // 描画範囲
-    let draw_rect = Rect::new(0, scanline - 8, screen_w, scanline);
-
     // 左上
     render_name_table(
         ppu,
         frame,
         top_left,
-        Rect::new(scroll_x, scroll_y, screen_w, screen_h),
+        Rect::new(scroll_x, scroll_y, SCREEN_W, SCREEN_H),
         -(scroll_x as isize),
         -(scroll_y as isize),
         &draw_rect,
@@ -76,8 +75,8 @@ pub fn draw_background(ppu: &NesPPU, frame: &mut Frame, scanline: usize) {
         ppu,
         frame,
         top_right,
-        Rect::new(0, scroll_y, scroll_x, screen_h),
-        (screen_w - scroll_x) as isize,
+        Rect::new(0, scroll_y, scroll_x, SCREEN_H),
+        (SCREEN_W - scroll_x) as isize,
         -(scroll_y as isize),
         &draw_rect,
     );
@@ -87,9 +86,9 @@ pub fn draw_background(ppu: &NesPPU, frame: &mut Frame, scanline: usize) {
         ppu,
         frame,
         bottom_left,
-        Rect::new(scroll_x, 0, screen_w, scroll_y),
+        Rect::new(scroll_x, 0, SCREEN_W, scroll_y),
         -(scroll_x as isize),
-        (screen_h - scroll_y) as isize,
+        (SCREEN_H - scroll_y) as isize,
         &draw_rect,
     );
 
@@ -99,34 +98,49 @@ pub fn draw_background(ppu: &NesPPU, frame: &mut Frame, scanline: usize) {
         frame,
         bottom_right,
         Rect::new(0, 0, scroll_x, scroll_y),
-        (screen_w - scroll_x) as isize,
-        (screen_h - scroll_y) as isize,
+        (SCREEN_W - scroll_x) as isize,
+        (SCREEN_H - scroll_y) as isize,
         &draw_rect,
     );
 }
 
-pub fn draw_sprites(ppu: &NesPPU, frame: &mut Frame, scanline: usize) {
-    // TODO 8x16 mode
-    // if ppu.ctrl.is_sprite_8x16_mode() {
+fn draw_sprites(ppu: &NesPPU, frame: &mut Frame, draw_rect: &Rect) {
     for i in (0..ppu.oam_data.len()).step_by(4).rev() {
         let tile_y = ppu.oam_data[i] as usize;
         let tile_idx = ppu.oam_data[i + 1] as u16;
         let attr = ppu.oam_data[i + 2];
         let tile_x = ppu.oam_data[i + 3] as usize;
 
-        let start = if ppu.ctrl.is_sprite_8x16_mode() {
+        if ppu.ctrl.is_sprite_8x16_mode() {
             let bank = if (tile_idx & 0x01) == 0 { 0 } else { 0x1000 };
-            bank + ((tile_idx & 0xFE) >> 1) * 16
+            let top = bank + (tile_idx & 0xFE) * 16;
+            let bottom = bank + ((tile_idx & 0xFE) + 1) * 16;
+
+            let flip_vertical = (attr >> 7 & 1) == 1;
+            if flip_vertical {
+                draw_tile(ppu, frame, bottom, tile_x, tile_y, attr, draw_rect);
+                draw_tile(ppu, frame, top, tile_x, tile_y + 8, attr, draw_rect);
+            } else {
+                draw_tile(ppu, frame, top, tile_x, tile_y, attr, draw_rect);
+                draw_tile(ppu, frame, bottom, tile_x, tile_y + 8, attr, draw_rect);
+            }
         } else {
             let bank: u16 = ppu.ctrl.sprite_pattern_addr();
-            bank + tile_idx * 16
-        };
-
-        draw_tile(ppu, frame, start, tile_x, tile_y, attr);
+            let start = bank + tile_idx * 16;
+            draw_tile(ppu, frame, start, tile_x, tile_y, attr, draw_rect);
+        }
     }
 }
 
-fn draw_tile(ppu: &NesPPU, frame: &mut Frame, start: u16, tile_x: usize, tile_y: usize, attr: u8) {
+fn draw_tile(
+    ppu: &NesPPU,
+    frame: &mut Frame,
+    start: u16,
+    tile_x: usize,
+    tile_y: usize,
+    attr: u8,
+    draw_rect: &Rect,
+) {
     let flip_vertical = (attr >> 7 & 1) == 1;
     let flip_horizontal = (attr >> 6 & 1) == 1;
     let palette_idx = attr & 0b11;
@@ -152,11 +166,15 @@ fn draw_tile(ppu: &NesPPU, frame: &mut Frame, start: u16, tile_x: usize, tile_y:
                 _ => panic!("can't be"),
             };
 
-            match (flip_horizontal, flip_vertical) {
-                (false, false) => frame.set_pixel(tile_x + x, tile_y + y, rgb),
-                (true, false) => frame.set_pixel(tile_x + 7 - x, tile_y + y, rgb),
-                (false, true) => frame.set_pixel(tile_x + x, tile_y + 7 - y, rgb),
-                (true, true) => frame.set_pixel(tile_x + 7 - x, tile_y + 7 - y, rgb),
+            let (_x, _y) = match (flip_horizontal, flip_vertical) {
+                (false, false) => (tile_x + x, tile_y + y),
+                (true, false) => (tile_x + 7 - x, tile_y + y),
+                (false, true) => (tile_x + x, tile_y + 7 - y),
+                (true, true) => (tile_x + 7 - x, tile_y + 7 - y),
+            };
+
+            if _x >= draw_rect.x1 && _x < draw_rect.x2 && _y >= draw_rect.y1 && _y < draw_rect.y2 {
+                frame.set_pixel(_x, _y, rgb)
             }
         }
     }
