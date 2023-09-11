@@ -40,6 +40,14 @@ fn draw_background(ppu: &NesPPU, frame: &mut Frame, draw_rect: &Rect) {
     let mirroring = unsafe { MAPPER.mirroring() };
     let vram_a = &ppu.vram[0x000..0x400];
     let vram_b = &ppu.vram[0x400..0x800];
+    // println!(
+    //     "BG s({}, {}) m({:?}, {:04X}) SL: {}",
+    //     scroll_x,
+    //     scroll_y,
+    //     mirroring,
+    //     ppu.ctrl.nametable_addr(),
+    //     draw_rect.y2,
+    // );
     let (top_left, top_right, bottom_left, bottom_right) =
         match (&mirroring, ppu.ctrl.nametable_addr()) {
             (Mirroring::VERTICAL, 0x2000) | (Mirroring::VERTICAL, 0x2800) => {
