@@ -14,25 +14,33 @@ pub struct NesAPU {
 
     ch1_device: AudioDevice<SquareWave>,
     ch1_sender: Sender<SquareEvent>,
+    ch1_receiver: Receiver<ChannelEvent>,
+    ch1_lenght_count: u8,
 
     ch2_device: AudioDevice<SquareWave>,
     ch2_sender: Sender<SquareEvent>,
+    ch2_receiver: Receiver<ChannelEvent>,
+    ch2_lenght_count: u8,
 
     ch3_device: AudioDevice<TriangleWave>,
     ch3_sender: Sender<TriangleEvent>,
+    ch3_receiver: Receiver<ChannelEvent>,
+    ch3_lenght_count: u8,
 
     ch4_device: AudioDevice<NoiseWave>,
     ch4_sender: Sender<NoiseEvent>,
+    ch4_receiver: Receiver<ChannelEvent>,
+    ch4_lenght_count: u8,
 }
 
 const NES_CPU_CLOCK: f32 = 1_789_772.5; // 1.78MHz
 
 impl NesAPU {
     pub fn new(sdl_context: &sdl2::Sdl) -> Self {
-        let (ch1_device, ch1_sender) = init_square(&sdl_context);
-        let (ch2_device, ch2_sender) = init_square(&sdl_context);
-        let (ch3_device, ch3_sender) = init_triangle(&sdl_context);
-        let (ch4_device, ch4_sender) = init_noise(&sdl_context);
+        let (ch1_device, ch1_sender, ch1_receiver) = init_square(&sdl_context);
+        let (ch2_device, ch2_sender, ch2_receiver) = init_square(&sdl_context);
+        let (ch3_device, ch3_sender, ch3_receiver) = init_triangle(&sdl_context);
+        let (ch4_device, ch4_sender, ch4_receiver) = init_noise(&sdl_context);
 
         NesAPU {
             ch1_register: Ch1Register::new(),
@@ -46,15 +54,23 @@ impl NesAPU {
 
             ch1_device: ch1_device,
             ch1_sender: ch1_sender,
+            ch1_receiver: ch1_receiver,
+            ch1_lenght_count: 0,
 
             ch2_device: ch2_device,
             ch2_sender: ch2_sender,
+            ch2_receiver: ch2_receiver,
+            ch2_lenght_count: 0,
 
             ch3_device: ch3_device,
             ch3_sender: ch3_sender,
+            ch3_receiver: ch3_receiver,
+            ch3_lenght_count: 0,
 
             ch4_device: ch4_device,
             ch4_sender: ch4_sender,
+            ch4_receiver: ch4_receiver,
+            ch4_lenght_count: 0,
         }
     }
 
@@ -194,7 +210,13 @@ impl NesAPU {
     }
 
     pub fn read_status(&mut self) -> u8 {
-        let res = self.status.bits();
+        let mut res = self.status.bits();
+        self.receive_events();
+        res = res & 0xF0;
+        res = res | if self.ch1_lenght_count == 0 { 0 } else { 1 };
+        res = res | (if self.ch2_lenght_count == 0 { 0 } else { 1 } << 1);
+        res = res | (if self.ch3_lenght_count == 0 { 0 } else { 1 } << 2);
+        res = res | (if self.ch4_lenght_count == 0 { 0 } else { 1 } << 3);
         self.status.remove(StatusRegister::ENABLE_FRAME_IRQ);
         res
     }
@@ -237,6 +259,37 @@ impl NesAPU {
         self.counter = 0;
     }
 
+    fn receive_events(&mut self) {
+        loop {
+            let res = self.ch1_receiver.recv_timeout(Duration::from_millis(0));
+            match res {
+                Ok(ChannelEvent::LengthCounter(count)) => self.ch1_lenght_count = count,
+                _ => break,
+            }
+        }
+        loop {
+            let res = self.ch2_receiver.recv_timeout(Duration::from_millis(0));
+            match res {
+                Ok(ChannelEvent::LengthCounter(count)) => self.ch2_lenght_count = count,
+                _ => break,
+            }
+        }
+        loop {
+            let res = self.ch3_receiver.recv_timeout(Duration::from_millis(0));
+            match res {
+                Ok(ChannelEvent::LengthCounter(count)) => self.ch3_lenght_count = count,
+                _ => break,
+            }
+        }
+        loop {
+            let res = self.ch4_receiver.recv_timeout(Duration::from_millis(0));
+            match res {
+                Ok(ChannelEvent::LengthCounter(count)) => self.ch4_lenght_count = count,
+                _ => break,
+            }
+        }
+    }
+
     pub fn tick(&mut self, cycles: u8) {
         self.cycles += cycles as usize;
 
@@ -244,6 +297,8 @@ impl NesAPU {
         if self.cycles >= interval {
             self.cycles -= interval;
             self.counter += 1;
+
+            self.receive_events();
 
             match self.frame_counter.mode() {
                 4 => {
@@ -733,6 +788,11 @@ impl Sweep {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+enum ChannelEvent {
+    LengthCounter(u8),
+}
+
+#[derive(Debug, Clone, PartialEq)]
 enum SquareEvent {
     Note(SquareNote),
     Enable(bool),
@@ -770,6 +830,7 @@ struct SquareWave {
     freq: f32,
     phase: f32,
     receiver: Receiver<SquareEvent>,
+    sender: Sender<ChannelEvent>,
     enabled: bool,
     note: SquareNote,
     envelope: Envelope,
@@ -790,7 +851,12 @@ impl AudioCallback for SquareWave {
                     Ok(SquareEvent::EnvelopeTick()) => self.envelope.tick(),
                     Ok(SquareEvent::Enable(b)) => self.enabled = b,
                     Ok(SquareEvent::LengthCounter(l)) => self.length_counter = l,
-                    Ok(SquareEvent::LengthCounterTick()) => self.length_counter.tick(),
+                    Ok(SquareEvent::LengthCounterTick()) => {
+                        self.length_counter.tick();
+                        self.sender
+                            .send(ChannelEvent::LengthCounter(self.length_counter.counter))
+                            .unwrap();
+                    }
                     Ok(SquareEvent::Sweep(s)) => self.sweep = s,
                     Ok(SquareEvent::SweepTick()) => self.sweep.tick(&self.length_counter),
                     Ok(SquareEvent::Reset()) => {
@@ -822,10 +888,17 @@ impl AudioCallback for SquareWave {
     }
 }
 
-fn init_square(sdl_context: &sdl2::Sdl) -> (AudioDevice<SquareWave>, Sender<SquareEvent>) {
+fn init_square(
+    sdl_context: &sdl2::Sdl,
+) -> (
+    AudioDevice<SquareWave>,
+    Sender<SquareEvent>,
+    Receiver<ChannelEvent>,
+) {
     let audio_subsystem = sdl_context.audio().unwrap();
 
     let (sender, receiver) = channel::<SquareEvent>();
+    let (sender2, receiver2) = channel::<ChannelEvent>();
 
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
@@ -838,6 +911,7 @@ fn init_square(sdl_context: &sdl2::Sdl) -> (AudioDevice<SquareWave>, Sender<Squa
             freq: spec.freq as f32,
             phase: 0.0,
             receiver: receiver,
+            sender: sender2,
             enabled: true,
             note: SquareNote::new(),
             envelope: Envelope::new(0, false, false),
@@ -848,7 +922,7 @@ fn init_square(sdl_context: &sdl2::Sdl) -> (AudioDevice<SquareWave>, Sender<Squa
 
     device.resume();
 
-    (device, sender)
+    (device, sender, receiver2)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -879,7 +953,7 @@ struct TriangleWave {
     freq: f32,
     phase: f32,
     receiver: Receiver<TriangleEvent>,
-
+    sender: Sender<ChannelEvent>,
     enabled: bool,
     note: TriangleNote,
     length_counter: LengthCounter,
@@ -900,6 +974,9 @@ impl AudioCallback for TriangleWave {
                     Ok(TriangleEvent::LengthCounterTick()) => {
                         self.length_counter.tick();
                         self.linear_counter.tick();
+                        self.sender
+                            .send(ChannelEvent::LengthCounter(self.length_counter.counter))
+                            .unwrap();
                     }
                     Ok(TriangleEvent::LinearCounter(l)) => self.linear_counter = l,
                     Ok(TriangleEvent::Reset()) => self.length_counter.reset(),
@@ -928,10 +1005,17 @@ impl AudioCallback for TriangleWave {
     }
 }
 
-fn init_triangle(sdl_context: &sdl2::Sdl) -> (AudioDevice<TriangleWave>, Sender<TriangleEvent>) {
+fn init_triangle(
+    sdl_context: &sdl2::Sdl,
+) -> (
+    AudioDevice<TriangleWave>,
+    Sender<TriangleEvent>,
+    Receiver<ChannelEvent>,
+) {
     let audio_subsystem = sdl_context.audio().unwrap();
 
     let (sender, receiver) = channel::<TriangleEvent>();
+    let (sender2, receiver2) = channel::<ChannelEvent>();
 
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
@@ -944,6 +1028,7 @@ fn init_triangle(sdl_context: &sdl2::Sdl) -> (AudioDevice<TriangleWave>, Sender<
             freq: spec.freq as f32,
             phase: 0.0,
             receiver: receiver,
+            sender: sender2,
             enabled: true,
             note: TriangleNote::new(),
             length_counter: LengthCounter::new(false, 0),
@@ -953,7 +1038,7 @@ fn init_triangle(sdl_context: &sdl2::Sdl) -> (AudioDevice<TriangleWave>, Sender<
 
     device.resume();
 
-    (device, sender)
+    (device, sender, receiver2)
 }
 
 static NOISE_TABLE: [u16; 16] = [
@@ -998,6 +1083,7 @@ struct NoiseWave {
     freq: f32,
     phase: f32,
     receiver: Receiver<NoiseEvent>,
+    sender: Sender<ChannelEvent>,
     value: bool,
     long_random: NoiseRandom,
     short_random: NoiseRandom,
@@ -1021,7 +1107,12 @@ impl AudioCallback for NoiseWave {
                     Ok(NoiseEvent::Envelope(e)) => self.envelope = e,
                     Ok(NoiseEvent::EnvelopeTick()) => self.envelope.tick(),
                     Ok(NoiseEvent::LengthCounter(l)) => self.length_counter = l,
-                    Ok(NoiseEvent::LengthCounterTick()) => self.length_counter.tick(),
+                    Ok(NoiseEvent::LengthCounterTick()) => {
+                        self.length_counter.tick();
+                        self.sender
+                            .send(ChannelEvent::LengthCounter(self.length_counter.counter))
+                            .unwrap();
+                    }
                     Ok(NoiseEvent::Reset()) => {
                         self.envelope.reset();
                         self.length_counter.reset();
@@ -1079,10 +1170,17 @@ impl NoiseRandom {
     }
 }
 
-fn init_noise(sdl_context: &sdl2::Sdl) -> (AudioDevice<NoiseWave>, Sender<NoiseEvent>) {
+fn init_noise(
+    sdl_context: &sdl2::Sdl,
+) -> (
+    AudioDevice<NoiseWave>,
+    Sender<NoiseEvent>,
+    Receiver<ChannelEvent>,
+) {
     let audio_subsystem = sdl_context.audio().unwrap();
 
     let (sender, receiver) = channel::<NoiseEvent>();
+    let (sender2, receiver2) = channel::<ChannelEvent>();
 
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
@@ -1095,6 +1193,7 @@ fn init_noise(sdl_context: &sdl2::Sdl) -> (AudioDevice<NoiseWave>, Sender<NoiseE
             freq: spec.freq as f32,
             phase: 0.0,
             receiver: receiver,
+            sender: sender2,
             value: false,
             long_random: NoiseRandom::long(),
             short_random: NoiseRandom::short(),
@@ -1107,7 +1206,7 @@ fn init_noise(sdl_context: &sdl2::Sdl) -> (AudioDevice<NoiseWave>, Sender<NoiseE
 
     device.resume();
 
-    (device, sender)
+    (device, sender, receiver2)
 }
 
 bitflags! {
