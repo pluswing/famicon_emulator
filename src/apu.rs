@@ -84,7 +84,7 @@ impl NesAPU {
             .unwrap();
 
         self.ch1_sender
-            .send(SquareEvent::Envelope(Envelope::new(
+            .send(SquareEvent::Envelope(EnvelopeData::new(
                 self.ch1_register.volume,
                 self.ch1_register.envelope_flag,
                 !self.ch1_register.key_off_counter_flag,
@@ -123,7 +123,7 @@ impl NesAPU {
             .unwrap();
 
         self.ch2_sender
-            .send(SquareEvent::Envelope(Envelope::new(
+            .send(SquareEvent::Envelope(EnvelopeData::new(
                 self.ch2_register.volume,
                 self.ch2_register.envelope_flag,
                 !self.ch2_register.key_off_counter_flag,
@@ -190,7 +190,7 @@ impl NesAPU {
             .unwrap();
 
         self.ch4_sender
-            .send(NoiseEvent::Envelope(Envelope::new(
+            .send(NoiseEvent::Envelope(EnvelopeData::new(
                 self.ch4_register.volume,
                 self.ch4_register.envelope_flag,
                 !self.ch4_register.key_off_counter_flag,
@@ -591,23 +591,36 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq)]
-struct Envelope {
+struct EnvelopeData {
     rate: u8,
     enabled: bool,
     loop_flag: bool,
+}
+
+impl EnvelopeData {
+    fn new(rate: u8, enabled: bool, loop_flag: bool) -> Self {
+        EnvelopeData {
+            rate,
+            enabled,
+            loop_flag,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct Envelope {
+    data: EnvelopeData,
 
     counter: u8,
     division_period: u8,
 }
 
 impl Envelope {
-    fn new(rate: u8, enabled: bool, loop_flag: bool) -> Self {
+    fn new() -> Self {
         Envelope {
-            rate,
-            enabled,
-            loop_flag,
+            data: EnvelopeData::new(0, false, false),
             counter: 0x0F,
-            division_period: rate + 1,
+            division_period: 1,
         }
     }
 
@@ -621,25 +634,25 @@ impl Envelope {
         if self.counter != 0 {
             self.counter -= 1;
         } else if self.counter == 0 {
-            if self.loop_flag {
+            if self.data.loop_flag {
                 self.reset();
             }
         }
-        self.division_period = self.rate + 1;
+        self.division_period = self.data.rate + 1;
     }
 
     fn volume(&self) -> f32 {
-        (if self.enabled {
+        (if self.data.enabled {
             self.counter
         } else {
-            self.rate
+            self.data.rate
         }) as f32
             / 15.0
     }
 
     fn reset(&mut self) {
         self.counter = 0x0F;
-        self.division_period = self.rate + 1;
+        self.division_period = self.data.rate + 1;
     }
 }
 
@@ -796,7 +809,7 @@ enum ChannelEvent {
 enum SquareEvent {
     Note(SquareNote),
     Enable(bool),
-    Envelope(Envelope),
+    Envelope(EnvelopeData),
     EnvelopeTick(),
     LengthCounter(LengthCounter),
     LengthCounterTick(),
@@ -847,7 +860,7 @@ impl AudioCallback for SquareWave {
                 let res = self.receiver.recv_timeout(Duration::from_millis(0));
                 match res {
                     Ok(SquareEvent::Note(note)) => self.note = note,
-                    Ok(SquareEvent::Envelope(e)) => self.envelope = e,
+                    Ok(SquareEvent::Envelope(e)) => self.envelope.data = e,
                     Ok(SquareEvent::EnvelopeTick()) => self.envelope.tick(),
                     Ok(SquareEvent::Enable(b)) => self.enabled = b,
                     Ok(SquareEvent::LengthCounter(l)) => self.length_counter = l,
@@ -914,7 +927,7 @@ fn init_square(
             sender: sender2,
             enabled: true,
             note: SquareNote::new(),
-            envelope: Envelope::new(0, false, false),
+            envelope: Envelope::new(),
             length_counter: LengthCounter::new(false, 0),
             sweep: Sweep::new(0, 0, 0, 0, false),
         })
@@ -1050,7 +1063,7 @@ static NOISE_TABLE: [u16; 16] = [
 enum NoiseEvent {
     Note(NoiseNote),
     Enable(bool),
-    Envelope(Envelope),
+    Envelope(EnvelopeData),
     EnvelopeTick(),
     LengthCounter(LengthCounter),
     LengthCounterTick(),
@@ -1104,7 +1117,7 @@ impl AudioCallback for NoiseWave {
                 match res {
                     Ok(NoiseEvent::Note(note)) => self.note = note,
                     Ok(NoiseEvent::Enable(b)) => self.enabled = b,
-                    Ok(NoiseEvent::Envelope(e)) => self.envelope = e,
+                    Ok(NoiseEvent::Envelope(e)) => self.envelope.data = e,
                     Ok(NoiseEvent::EnvelopeTick()) => self.envelope.tick(),
                     Ok(NoiseEvent::LengthCounter(l)) => self.length_counter = l,
                     Ok(NoiseEvent::LengthCounterTick()) => {
@@ -1198,7 +1211,7 @@ fn init_noise(
             long_random: NoiseRandom::long(),
             short_random: NoiseRandom::short(),
             enabled: true,
-            envelope: Envelope::new(0, false, false),
+            envelope: Envelope::new(),
             note: NoiseNote::new(),
             length_counter: LengthCounter::new(false, 0),
         })
