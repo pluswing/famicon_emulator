@@ -92,14 +92,14 @@ impl NesAPU {
             .unwrap();
 
         self.ch1_sender
-            .send(SquareEvent::LengthCounter(LengthCounter::new(
-                self.ch1_register.key_off_counter_flag,
+            .send(SquareEvent::LengthCounter(LengthCounterData::new(
                 self.ch1_register.key_off_count,
+                self.ch1_register.key_off_counter_flag,
             )))
             .unwrap();
 
         self.ch1_sender
-            .send(SquareEvent::Sweep(Sweep::new(
+            .send(SquareEvent::Sweep(SweepData::new(
                 self.ch1_register.frequency,
                 self.ch1_register.sweep_change_amount,
                 self.ch1_register.sweep_direction,
@@ -131,14 +131,14 @@ impl NesAPU {
             .unwrap();
 
         self.ch2_sender
-            .send(SquareEvent::LengthCounter(LengthCounter::new(
-                self.ch2_register.key_off_counter_flag,
+            .send(SquareEvent::LengthCounter(LengthCounterData::new(
                 self.ch2_register.key_off_count,
+                self.ch2_register.key_off_counter_flag,
             )))
             .unwrap();
 
         self.ch2_sender
-            .send(SquareEvent::Sweep(Sweep::new(
+            .send(SquareEvent::Sweep(SweepData::new(
                 self.ch2_register.frequency,
                 self.ch2_register.sweep_change_amount,
                 self.ch2_register.sweep_direction,
@@ -162,14 +162,14 @@ impl NesAPU {
             .unwrap();
 
         self.ch3_sender
-            .send(TriangleEvent::LengthCounter(LengthCounter::new(
-                self.ch3_register.key_off_counter_flag,
+            .send(TriangleEvent::LengthCounter(LengthCounterData::new(
                 self.ch3_register.key_off_count,
+                self.ch3_register.key_off_counter_flag,
             )))
             .unwrap();
 
         self.ch3_sender
-            .send(TriangleEvent::LinearCounter(LinearCounter::new(
+            .send(TriangleEvent::LinearCounter(LinearCounterData::new(
                 self.ch3_register.length,
             )))
             .unwrap();
@@ -198,9 +198,9 @@ impl NesAPU {
             .unwrap();
 
         self.ch4_sender
-            .send(NoiseEvent::LengthCounter(LengthCounter::new(
-                self.ch4_register.key_off_counter_flag,
+            .send(NoiseEvent::LengthCounter(LengthCounterData::new(
                 self.ch4_register.key_off_count,
+                self.ch4_register.key_off_counter_flag,
             )))
             .unwrap();
 
@@ -657,23 +657,36 @@ impl Envelope {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct LengthCounter {
-    enabled: bool,
+struct LengthCounterData {
     count: u8, // 元のカウント値
+    enabled: bool,
+}
+
+impl LengthCounterData {
+    fn new(count: u8, enabled: bool) -> Self {
+        LengthCounterData {
+            count: LENGTH_COUNTER_TABLE[count as usize],
+            enabled,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct LengthCounter {
+    data: LengthCounterData,
     counter: u8,
 }
 
 impl LengthCounter {
-    fn new(enabled: bool, counter: u8) -> Self {
+    fn new() -> Self {
         LengthCounter {
-            enabled,
-            count: LENGTH_COUNTER_TABLE[counter as usize],
-            counter: LENGTH_COUNTER_TABLE[counter as usize],
+            data: LengthCounterData::new(0, false),
+            counter: 0,
         }
     }
 
     fn tick(&mut self) {
-        if !self.enabled {
+        if !self.data.enabled {
             return;
         }
         if self.counter > 0 {
@@ -682,25 +695,35 @@ impl LengthCounter {
     }
 
     fn mute(&self) -> bool {
-        self.enabled && self.counter == 0
+        self.data.enabled && self.counter == 0
     }
 
     fn reset(&mut self) {
-        self.counter = self.count;
+        self.counter = self.data.count;
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct LinearCounterData {
+    count: u8, // 元のカウント値
+}
+impl LinearCounterData {
+    fn new(count: u8) -> Self {
+        LinearCounterData { count }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 struct LinearCounter {
-    count: u8, // 元のカウント値
+    data: LinearCounterData,
     counter: u8,
 }
 
 impl LinearCounter {
-    fn new(counter: u8) -> Self {
+    fn new() -> Self {
         LinearCounter {
-            count: counter,
-            counter,
+            data: LinearCounterData::new(0),
+            counter: 0,
         }
     }
 
@@ -715,7 +738,7 @@ impl LinearCounter {
     }
 
     fn reset(&mut self) {
-        self.counter = self.count;
+        self.counter = self.data.count;
     }
 }
 
@@ -723,19 +746,15 @@ static LENGTH_COUNTER_TABLE: [u8; 32] = [
     0x05, 0x7F, 0x0A, 0x01, 0x14, 0x02, 0x28, 0x03, 0x50, 0x04, 0x1E, 0x05, 0x07, 0x06, 0x0D, 0x07,
     0x06, 0x08, 0x0C, 0x09, 0x18, 0x0A, 0x30, 0x0B, 0x60, 0x0C, 0x24, 0x0D, 0x08, 0x0E, 0x10, 0x0F,
 ];
-
 #[derive(Debug, Clone, PartialEq)]
-struct Sweep {
-    org_freq: u16,
+struct SweepData {
     frequency: u16,
     change_amount: u8,
     direction: u8,
     timer_count: u8,
     enabled: bool,
-    counter: u8,
 }
-
-impl Sweep {
+impl SweepData {
     fn new(
         frequency: u16,
         change_amount: u8,
@@ -743,22 +762,36 @@ impl Sweep {
         timer_count: u8,
         enabled: bool,
     ) -> Self {
-        Sweep {
-            org_freq: frequency,
+        SweepData {
             frequency,
             change_amount,
             direction,
             timer_count,
             enabled,
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq)]
+struct Sweep {
+    data: SweepData,
+    frequency: u16,
+    counter: u8,
+}
+
+impl Sweep {
+    fn new() -> Self {
+        Sweep {
+            data: SweepData::new(0, 0, 0, 0, false),
+            frequency: 0,
             counter: 0,
         }
     }
 
     fn tick(&mut self, length_counter: &LengthCounter) {
-        if !self.enabled {
+        if !self.data.enabled {
             return;
         }
-        if self.change_amount == 0 {
+        if self.data.change_amount == 0 {
             return;
         }
         // チャンネルの長さカウンタがゼロではない
@@ -767,18 +800,18 @@ impl Sweep {
         }
 
         self.counter += 1;
-        if self.counter < (self.timer_count + 1) {
+        if self.counter < (self.data.timer_count + 1) {
             return;
         }
 
         self.counter = 0;
 
-        if self.direction == 0 {
+        if self.data.direction == 0 {
             // しり下がりモード    新しい周期 = 周期 + (周期 >> N)
-            self.frequency = self.frequency + (self.frequency >> self.change_amount);
+            self.frequency = self.frequency + (self.frequency >> self.data.change_amount);
         } else {
             // しり上がりモード    新しい周期 = 周期 - (周期 >> N)
-            self.frequency = self.frequency - (self.frequency >> self.change_amount);
+            self.frequency = self.frequency - (self.frequency >> self.data.change_amount);
         }
 
         // もしチャンネルの周期が8未満か、$7FFより大きくなったなら、スイープを停止し、 チャンネルを無音化します。
@@ -795,7 +828,7 @@ impl Sweep {
     }
 
     fn reset(&mut self) {
-        self.frequency = self.org_freq; // TODO 要確認
+        self.frequency = self.data.frequency;
         self.counter = 0;
     }
 }
@@ -811,9 +844,9 @@ enum SquareEvent {
     Enable(bool),
     Envelope(EnvelopeData),
     EnvelopeTick(),
-    LengthCounter(LengthCounter),
+    LengthCounter(LengthCounterData),
     LengthCounterTick(),
-    Sweep(Sweep),
+    Sweep(SweepData),
     SweepTick(),
     Reset(),
 }
@@ -860,17 +893,19 @@ impl AudioCallback for SquareWave {
                 let res = self.receiver.recv_timeout(Duration::from_millis(0));
                 match res {
                     Ok(SquareEvent::Note(note)) => self.note = note,
-                    Ok(SquareEvent::Envelope(e)) => self.envelope.data = e,
+                    Ok(SquareEvent::Envelope(e)) => {
+                        self.envelope.data = e;
+                    }
                     Ok(SquareEvent::EnvelopeTick()) => self.envelope.tick(),
                     Ok(SquareEvent::Enable(b)) => self.enabled = b,
-                    Ok(SquareEvent::LengthCounter(l)) => self.length_counter = l,
+                    Ok(SquareEvent::LengthCounter(l)) => self.length_counter.data = l,
                     Ok(SquareEvent::LengthCounterTick()) => {
                         self.length_counter.tick();
                         self.sender
                             .send(ChannelEvent::LengthCounter(self.length_counter.counter))
                             .unwrap();
                     }
-                    Ok(SquareEvent::Sweep(s)) => self.sweep = s,
+                    Ok(SquareEvent::Sweep(s)) => self.sweep.data = s,
                     Ok(SquareEvent::SweepTick()) => self.sweep.tick(&self.length_counter),
                     Ok(SquareEvent::Reset()) => {
                         self.envelope.reset();
@@ -928,8 +963,8 @@ fn init_square(
             enabled: true,
             note: SquareNote::new(),
             envelope: Envelope::new(),
-            length_counter: LengthCounter::new(false, 0),
-            sweep: Sweep::new(0, 0, 0, 0, false),
+            length_counter: LengthCounter::new(),
+            sweep: Sweep::new(),
         })
         .unwrap();
 
@@ -942,9 +977,9 @@ fn init_square(
 enum TriangleEvent {
     Note(TriangleNote),
     Enable(bool),
-    LengthCounter(LengthCounter),
+    LengthCounter(LengthCounterData),
     LengthCounterTick(),
-    LinearCounter(LinearCounter),
+    LinearCounter(LinearCounterData),
     Reset(),
 }
 #[derive(Debug, Clone, PartialEq)]
@@ -983,7 +1018,7 @@ impl AudioCallback for TriangleWave {
                 match res {
                     Ok(TriangleEvent::Note(note)) => self.note = note,
                     Ok(TriangleEvent::Enable(b)) => self.enabled = b,
-                    Ok(TriangleEvent::LengthCounter(l)) => self.length_counter = l,
+                    Ok(TriangleEvent::LengthCounter(l)) => self.length_counter.data = l,
                     Ok(TriangleEvent::LengthCounterTick()) => {
                         self.length_counter.tick();
                         self.linear_counter.tick();
@@ -991,7 +1026,7 @@ impl AudioCallback for TriangleWave {
                             .send(ChannelEvent::LengthCounter(self.length_counter.counter))
                             .unwrap();
                     }
-                    Ok(TriangleEvent::LinearCounter(l)) => self.linear_counter = l,
+                    Ok(TriangleEvent::LinearCounter(l)) => self.linear_counter.data = l,
                     Ok(TriangleEvent::Reset()) => self.length_counter.reset(),
                     Err(_) => break,
                 }
@@ -1044,8 +1079,8 @@ fn init_triangle(
             sender: sender2,
             enabled: true,
             note: TriangleNote::new(),
-            length_counter: LengthCounter::new(false, 0),
-            linear_counter: LinearCounter::new(0),
+            length_counter: LengthCounter::new(),
+            linear_counter: LinearCounter::new(),
         })
         .unwrap();
 
@@ -1065,7 +1100,7 @@ enum NoiseEvent {
     Enable(bool),
     Envelope(EnvelopeData),
     EnvelopeTick(),
-    LengthCounter(LengthCounter),
+    LengthCounter(LengthCounterData),
     LengthCounterTick(),
     Reset(),
 }
@@ -1117,9 +1152,11 @@ impl AudioCallback for NoiseWave {
                 match res {
                     Ok(NoiseEvent::Note(note)) => self.note = note,
                     Ok(NoiseEvent::Enable(b)) => self.enabled = b,
-                    Ok(NoiseEvent::Envelope(e)) => self.envelope.data = e,
+                    Ok(NoiseEvent::Envelope(e)) => {
+                        self.envelope.data = e;
+                    }
                     Ok(NoiseEvent::EnvelopeTick()) => self.envelope.tick(),
-                    Ok(NoiseEvent::LengthCounter(l)) => self.length_counter = l,
+                    Ok(NoiseEvent::LengthCounter(l)) => self.length_counter.data = l,
                     Ok(NoiseEvent::LengthCounterTick()) => {
                         self.length_counter.tick();
                         self.sender
@@ -1213,7 +1250,7 @@ fn init_noise(
             enabled: true,
             envelope: Envelope::new(),
             note: NoiseNote::new(),
-            length_counter: LengthCounter::new(false, 0),
+            length_counter: LengthCounter::new(),
         })
         .unwrap();
 
