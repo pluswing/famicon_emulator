@@ -96,6 +96,7 @@ fn main() {
     let rom = load_rom("rom/Mother (Japan).nes");
     let rom = load_rom("rom/Super Mario Bros. 3 (Japan) (Rev 1).nes");
     let rom = load_rom("rom/Final Fantasy III (Japan).nes");
+    let rom = load_rom("rom/nes-test-roms/apu_mixer/noise.nes");
     let rom = mario_rom();
 
     info!(

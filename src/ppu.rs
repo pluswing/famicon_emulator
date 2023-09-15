@@ -314,7 +314,7 @@ impl NesPPU {
             self.cycles = self.cycles - 341;
             self.scanline += 1;
 
-            if self.scanline % 8 == 0 {
+            if (self.scanline % 8) == 0 {
                 render(&self, frame, self.scanline);
             }
 
@@ -354,6 +354,7 @@ impl NesPPU {
     fn is_sprite_zero_hit(&self, cycle: usize) -> bool {
         let y = self.oam_data[0] as usize;
         let x = self.oam_data[3] as usize;
+        // TODO スプライトが非表示かチェックする
         (y == self.scanline as usize) && x <= cycle && self.mask.show_sprites()
     }
 }
