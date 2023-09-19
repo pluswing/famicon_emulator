@@ -215,7 +215,7 @@ fn bg_pallette(
     ]
 }
 
-fn sprite_palette(ppu: &NesPPU, tile_y: usize, palette_idx: u8) -> [u8; 4] {
+pub fn sprite_palette(ppu: &NesPPU, tile_y: usize, palette_idx: u8) -> [u8; 4] {
     let start = 0x11 + (palette_idx * 4) as usize;
     let p = ppu.read_palette_table(tile_y);
     [0, p[start] & 0x3F, p[start + 1] & 0x3F, p[start + 2] & 0x3F]

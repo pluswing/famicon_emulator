@@ -93,10 +93,10 @@ fn main() {
     let rom = load_rom("rom/Dragon Quest III - Soshite Densetsu e... (Japan).nes");
     let rom = load_rom("rom/Dragon Quest IV - Michibikareshi Monotachi (Japan) (Rev 1).nes");
     let rom = load_rom("rom/Yoshi no Tamago (Japan).nes");
-    let rom = load_rom("rom/Mother (Japan).nes");
     let rom = load_rom("rom/Super Mario Bros. 3 (Japan) (Rev 1).nes");
     let rom = load_rom("rom/Final Fantasy III (Japan).nes");
     let rom = load_rom("rom/nes-test-roms/apu_mixer/noise.nes");
+    let rom = load_rom("rom/Mother (Japan).nes");
     let rom = mario_rom();
 
     info!(

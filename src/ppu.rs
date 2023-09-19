@@ -3,7 +3,8 @@ use log::{debug, info, trace};
 
 use crate::frame::Frame;
 use crate::mapper::Mapper;
-use crate::render::{self, render};
+use crate::palette;
+use crate::render::{self, render, sprite_palette};
 use crate::{cpu::IN_TRACE, rom::Mirroring, MAPPER};
 
 pub struct NesPPU {
@@ -353,9 +354,41 @@ impl NesPPU {
 
     fn is_sprite_zero_hit(&self, cycle: usize) -> bool {
         let y = self.oam_data[0] as usize;
+        let tile_idx = self.oam_data[1] as u16;
+        // let attr = self.oam_data[2];
         let x = self.oam_data[3] as usize;
-        // TODO スプライトが非表示かチェックする
-        (y == self.scanline as usize) && x <= cycle && self.mask.show_sprites()
+
+        // タイル取得
+        let bank: u16 = self.ctrl.sprite_pattern_addr();
+        let start = bank + tile_idx * 16;
+        let mut tile: [u8; 16] = [0; 16];
+        for i in 0..=15 {
+            tile[i] = unsafe { MAPPER.read_chr_rom(start + i as u16) }
+        }
+
+        // パレット取得
+        // let palette_idx = attr & 0b11;
+        // let sprite_palette = sprite_palette(self, y, palette_idx);
+
+        if (y == self.scanline as usize) && x <= cycle && self.mask.show_sprites() {
+            let line = self.scanline % 8;
+
+            let mut upper = tile[line];
+            let mut lower = tile[line + 8];
+            'ololo: for x in (0..=7).rev() {
+                let value = (1 & lower) << 1 | (1 & upper);
+                upper = upper >> 1;
+                lower = lower >> 1;
+                println!("MATCH");
+                match value {
+                    0 => continue 'ololo, // skip coloring the pixel
+                    _ => {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 }
 
