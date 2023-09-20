@@ -315,8 +315,8 @@ impl NesPPU {
             self.cycles = self.cycles - 341;
             self.scanline += 1;
 
-            if (self.scanline % 8) == 0 {
-                render(&self, frame, self.scanline);
+            if (self.scanline % 8) == 6 {
+                render(&self, frame, self.scanline + 2);
             }
 
             unsafe {
@@ -355,7 +355,6 @@ impl NesPPU {
     fn is_sprite_zero_hit(&self, cycle: usize) -> bool {
         let y = self.oam_data[0] as usize;
         let tile_idx = self.oam_data[1] as u16;
-        // let attr = self.oam_data[2];
         let x = self.oam_data[3] as usize;
 
         // タイル取得
@@ -366,11 +365,8 @@ impl NesPPU {
             tile[i] = unsafe { MAPPER.read_chr_rom(start + i as u16) }
         }
 
-        // パレット取得
-        // let palette_idx = attr & 0b11;
-        // let sprite_palette = sprite_palette(self, y, palette_idx);
-
-        if (y == self.scanline as usize) && x <= cycle && self.mask.show_sprites() {
+        let cur = self.scanline as i32 - (y as i32);
+        if 0 <= cur && cur <= 7 && x <= cycle && self.mask.show_sprites() {
             let line = self.scanline % 8;
 
             let mut upper = tile[line];
@@ -379,12 +375,9 @@ impl NesPPU {
                 let value = (1 & lower) << 1 | (1 & upper);
                 upper = upper >> 1;
                 lower = lower >> 1;
-                println!("MATCH");
                 match value {
                     0 => continue 'ololo, // skip coloring the pixel
-                    _ => {
-                        return true;
-                    }
+                    _ => return true,
                 }
             }
         }
