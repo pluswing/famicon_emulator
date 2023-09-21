@@ -1,4 +1,11 @@
 use log::{debug, info, trace};
+mod dmc;
+
+use self::dmc::Ch5Register;
+use bitflags::bitflags;
+use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::time::Duration;
 
 const MASTER_VOLUME: f32 = 0.4;
 
@@ -7,6 +14,7 @@ pub struct NesAPU {
     ch2_register: Ch2Register,
     ch3_register: Ch3Register,
     ch4_register: Ch4Register,
+    ch5_register: Ch5Register,
     frame_counter: FrameCounter,
     status: StatusRegister,
     cycles: usize,
@@ -47,6 +55,7 @@ impl NesAPU {
             ch2_register: Ch2Register::new(),
             ch3_register: Ch3Register::new(),
             ch4_register: Ch4Register::new(),
+            ch5_register: Ch5Register::new(),
             frame_counter: FrameCounter::new(),
             status: StatusRegister::new(),
             cycles: 0,
@@ -207,6 +216,10 @@ impl NesAPU {
         if addr == 0x400F {
             self.ch4_sender.send(NoiseEvent::Reset()).unwrap();
         }
+    }
+
+    pub fn write5ch(&mut self, addr: u16, value: u8) {
+        self.ch5_register.write(addr, value);
     }
 
     pub fn read_status(&mut self) -> u8 {
@@ -584,11 +597,6 @@ impl Ch4Register {
         }
     }
 }
-
-use bitflags::bitflags;
-use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq)]
 struct EnvelopeData {
