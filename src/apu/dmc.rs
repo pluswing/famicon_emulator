@@ -1,3 +1,12 @@
+use std::{
+    sync::mpsc::{channel, Receiver, Sender},
+    time::Duration,
+};
+
+use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
+
+use super::ChannelEvent;
+
 pub struct Ch5Register {
     // 4010
     pub irq_enabled: bool,
@@ -45,4 +54,70 @@ impl Ch5Register {
             _ => panic!("can't be"),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DmcEvent {
+    Enable(bool),
+    Reset(),
+}
+
+pub struct DmcWave {
+    freq: f32,
+    phase: f32,
+    receiver: Receiver<DmcEvent>,
+    sender: Sender<ChannelEvent>,
+    enabled: bool,
+}
+
+impl AudioCallback for DmcWave {
+    type Channel = f32;
+
+    fn callback(&mut self, out: &mut [f32]) {
+        for x in out.iter_mut() {
+            loop {
+                let res = self.receiver.recv_timeout(Duration::from_millis(0));
+                match res {
+                    Ok(DmcEvent::Enable(b)) => self.enabled = b,
+                    Ok(DmcEvent::Reset()) => {}
+                    Err(_) => break,
+                }
+            }
+            // TODO
+            *x = 0.0;
+        }
+    }
+}
+
+pub fn init_dmc(
+    sdl_context: &sdl2::Sdl,
+) -> (
+    AudioDevice<DmcWave>,
+    Sender<DmcEvent>,
+    Receiver<ChannelEvent>,
+) {
+    let audio_subsystem = sdl_context.audio().unwrap();
+
+    let (sender, receiver) = channel::<DmcEvent>();
+    let (sender2, receiver2) = channel::<ChannelEvent>();
+
+    let desired_spec = AudioSpecDesired {
+        freq: Some(44100),
+        channels: Some(1),
+        samples: None,
+    };
+
+    let device = audio_subsystem
+        .open_playback(None, &desired_spec, |spec| DmcWave {
+            freq: spec.freq as f32,
+            phase: 0.0,
+            receiver: receiver,
+            sender: sender2,
+            enabled: true,
+        })
+        .unwrap();
+
+    device.resume();
+
+    (device, sender, receiver2)
 }

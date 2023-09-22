@@ -1,7 +1,7 @@
 use log::{debug, info, trace};
 mod dmc;
 
-use self::dmc::Ch5Register;
+use self::dmc::{init_dmc, Ch5Register, DmcEvent, DmcWave};
 use bitflags::bitflags;
 use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -39,6 +39,11 @@ pub struct NesAPU {
     ch4_sender: Sender<NoiseEvent>,
     ch4_receiver: Receiver<ChannelEvent>,
     ch4_lenght_count: u8,
+
+    ch5_device: AudioDevice<DmcWave>,
+    ch5_sender: Sender<DmcEvent>,
+    ch5_receiver: Receiver<ChannelEvent>,
+    ch5_lenght_count: u8,
 }
 
 const NES_CPU_CLOCK: f32 = 1_789_772.5; // 1.78MHz
@@ -49,6 +54,7 @@ impl NesAPU {
         let (ch2_device, ch2_sender, ch2_receiver) = init_square(&sdl_context);
         let (ch3_device, ch3_sender, ch3_receiver) = init_triangle(&sdl_context);
         let (ch4_device, ch4_sender, ch4_receiver) = init_noise(&sdl_context);
+        let (ch5_device, ch5_sender, ch5_receiver) = init_dmc(&sdl_context);
 
         NesAPU {
             ch1_register: Ch1Register::new(),
@@ -80,6 +86,11 @@ impl NesAPU {
             ch4_sender: ch4_sender,
             ch4_receiver: ch4_receiver,
             ch4_lenght_count: 0,
+
+            ch5_device,
+            ch5_sender,
+            ch5_receiver,
+            ch5_lenght_count: 0,
         }
     }
 
@@ -220,6 +231,13 @@ impl NesAPU {
 
     pub fn write5ch(&mut self, addr: u16, value: u8) {
         self.ch5_register.write(addr, value);
+
+        // TODO
+        // self.ch5_sender.send(...)
+
+        if addr == 0x4013 {
+            self.ch5_sender.send(DmcEvent::Reset()).unwrap();
+        }
     }
 
     pub fn read_status(&mut self) -> u8 {
@@ -230,6 +248,7 @@ impl NesAPU {
         res = res | (if self.ch2_lenght_count == 0 { 0 } else { 1 } << 1);
         res = res | (if self.ch3_lenght_count == 0 { 0 } else { 1 } << 2);
         res = res | (if self.ch4_lenght_count == 0 { 0 } else { 1 } << 3);
+        res = res | (if self.ch5_lenght_count == 0 { 0 } else { 1 } << 4);
         self.status.remove(StatusRegister::ENABLE_FRAME_IRQ);
         res
     }
@@ -258,6 +277,12 @@ impl NesAPU {
         self.ch4_sender
             .send(NoiseEvent::Enable(
                 self.status.contains(StatusRegister::ENABLE_4CH),
+            ))
+            .unwrap();
+
+        self.ch5_sender
+            .send(DmcEvent::Enable(
+                self.status.contains(StatusRegister::ENABLE_5CH),
             ))
             .unwrap();
     }
@@ -298,6 +323,13 @@ impl NesAPU {
             let res = self.ch4_receiver.recv_timeout(Duration::from_millis(0));
             match res {
                 Ok(ChannelEvent::LengthCounter(count)) => self.ch4_lenght_count = count,
+                _ => break,
+            }
+        }
+        loop {
+            let res = self.ch5_receiver.recv_timeout(Duration::from_millis(0));
+            match res {
+                Ok(ChannelEvent::LengthCounter(count)) => self.ch5_lenght_count = count,
                 _ => break,
             }
         }
@@ -360,6 +392,7 @@ impl NesAPU {
         self.ch1_sender.send(SquareEvent::EnvelopeTick()).unwrap();
         self.ch2_sender.send(SquareEvent::EnvelopeTick()).unwrap();
         self.ch4_sender.send(NoiseEvent::EnvelopeTick()).unwrap();
+        // TODO ch5対応
     }
 
     fn send_length_counter_tick(&self) {
@@ -842,7 +875,7 @@ impl Sweep {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum ChannelEvent {
+pub enum ChannelEvent {
     LengthCounter(u8),
 }
 
