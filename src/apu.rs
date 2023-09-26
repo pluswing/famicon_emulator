@@ -393,6 +393,10 @@ impl NesAPU {
         self.ch2_sender.send(SquareEvent::EnvelopeTick()).unwrap();
         self.ch4_sender.send(NoiseEvent::EnvelopeTick()).unwrap();
         // TODO ch5対応
+
+        self.ch3_sender
+            .send(TriangleEvent::LinearCounterTick())
+            .unwrap();
     }
 
     fn send_length_counter_tick(&self) {
@@ -952,6 +956,7 @@ impl AudioCallback for SquareWave {
                         self.envelope.reset();
                         self.length_counter.reset();
                         self.sweep.reset();
+                        self.phase = 0.0;
                     }
                     Err(_) => break,
                 }
@@ -1021,6 +1026,7 @@ enum TriangleEvent {
     LengthCounter(LengthCounterData),
     LengthCounterTick(),
     LinearCounter(LinearCounterData),
+    LinearCounterTick(),
     Reset(),
 }
 #[derive(Debug, Clone, PartialEq)]
@@ -1062,13 +1068,19 @@ impl AudioCallback for TriangleWave {
                     Ok(TriangleEvent::LengthCounter(l)) => self.length_counter.data = l,
                     Ok(TriangleEvent::LengthCounterTick()) => {
                         self.length_counter.tick();
-                        self.linear_counter.tick();
                         self.sender
                             .send(ChannelEvent::LengthCounter(self.length_counter.counter))
                             .unwrap();
                     }
                     Ok(TriangleEvent::LinearCounter(l)) => self.linear_counter.data = l,
-                    Ok(TriangleEvent::Reset()) => self.length_counter.reset(),
+                    Ok(TriangleEvent::LinearCounterTick()) => {
+                        self.linear_counter.tick();
+                    }
+                    Ok(TriangleEvent::Reset()) => {
+                        self.length_counter.reset();
+                        self.linear_counter.reset();
+                        self.phase = 0.0;
+                    }
                     Err(_) => break,
                 }
             }
@@ -1131,8 +1143,8 @@ fn init_triangle(
 }
 
 static NOISE_TABLE: [u16; 16] = [
-    0x0002, 0x0004, 0x0008, 0x0010, 0x0020, 0x0030, 0x0040, 0x0050, 0x0065, 0x007F, 0x00BE, 0x00FE,
-    0x017D, 0x01FC, 0x03F9, 0x07F2,
+    0x004, 0x008, 0x010, 0x020, 0x040, 0x060, 0x080, 0x0A0, 0x0CA, 0x0FE, 0x17C, 0x1FC, 0x2FA,
+    0x3F8, 0x7F2, 0xFE4,
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1173,7 +1185,6 @@ struct NoiseWave {
     phase: f32,
     receiver: Receiver<NoiseEvent>,
     sender: Sender<ChannelEvent>,
-    value: bool,
     long_random: NoiseRandom,
     short_random: NoiseRandom,
 
@@ -1224,6 +1235,7 @@ impl AudioCallback for NoiseWave {
                     Ok(NoiseEvent::Reset()) => {
                         self.envelope.reset();
                         self.length_counter.reset();
+                        self.phase = 0.0;
                     }
                     Err(_) => break,
                 }
@@ -1232,7 +1244,7 @@ impl AudioCallback for NoiseWave {
             *x = if self.sound_table.len() == 0 {
                 0.0
             } else {
-                self.sound_table[((NES_CPU_CLOCK - 0.5) * self.phase) as usize]
+                self.sound_table[((NES_CPU_CLOCK - 0.5) * (self.phase / self.freq)) as usize]
                     * self.envelope.volume()
                     * MASTER_VOLUME
             };
@@ -1245,7 +1257,7 @@ impl AudioCallback for NoiseWave {
                 *x = 0.0;
             }
 
-            self.phase = (self.phase + 1.0 * self.freq) % 1.0;
+            self.phase = (self.phase + 1.0) % self.freq;
         }
     }
 }
@@ -1300,7 +1312,6 @@ fn init_noise(
             phase: 0.0,
             receiver: receiver,
             sender: sender2,
-            value: false,
             long_random: NoiseRandom::long(),
             short_random: NoiseRandom::short(),
             enabled: true,
