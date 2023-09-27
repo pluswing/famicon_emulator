@@ -997,7 +997,7 @@ fn init_square(
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
         channels: Some(1),
-        samples: None,
+        samples: Some(2),
     };
 
     let device = audio_subsystem
@@ -1121,7 +1121,7 @@ fn init_triangle(
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
         channels: Some(1),
-        samples: None,
+        samples: Some(2),
     };
 
     let device = audio_subsystem
@@ -1303,7 +1303,7 @@ fn init_noise(
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
         channels: Some(1),
-        samples: None,
+        samples: Some(2),
     };
 
     let device = audio_subsystem
