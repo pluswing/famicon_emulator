@@ -97,36 +97,47 @@ impl NesAPU {
     pub fn write1ch(&mut self, addr: u16, value: u8) {
         self.ch1_register.write(addr, value);
 
-        self.ch1_sender
-            .send(SquareEvent::Note(SquareNote {
-                duty: self.ch1_register.duty,
-            }))
-            .unwrap();
+        if addr == 0x4000 {
+            self.ch1_sender
+                .send(SquareEvent::Note(SquareNote {
+                    duty: self.ch1_register.duty,
+                }))
+                .unwrap();
 
-        self.ch1_sender
-            .send(SquareEvent::Envelope(EnvelopeData::new(
-                self.ch1_register.volume,
-                self.ch1_register.envelope_flag,
-                !self.ch1_register.key_off_counter_flag,
-            )))
-            .unwrap();
+            self.ch1_sender
+                .send(SquareEvent::Envelope(EnvelopeData::new(
+                    self.ch1_register.volume,
+                    self.ch1_register.envelope_flag,
+                    !self.ch1_register.key_off_counter_flag,
+                )))
+                .unwrap();
+        }
 
-        self.ch1_sender
-            .send(SquareEvent::LengthCounter(LengthCounterData::new(
-                self.ch1_register.key_off_count,
-                self.ch1_register.key_off_counter_flag,
-            )))
-            .unwrap();
+        if addr == 0x4000 || addr == 0x4003 {
+            self.ch1_sender
+                .send(SquareEvent::LengthCounter(LengthCounterData::new(
+                    self.ch1_register.key_off_count,
+                    self.ch1_register.key_off_counter_flag,
+                )))
+                .unwrap();
+        }
 
-        self.ch1_sender
-            .send(SquareEvent::Sweep(SweepData::new(
-                self.ch1_register.frequency,
-                self.ch1_register.sweep_change_amount,
-                self.ch1_register.sweep_direction,
-                self.ch1_register.sweep_timer_count,
-                self.ch1_register.sweep_enabled,
-            )))
-            .unwrap();
+        if addr == 0x4001 {
+            self.ch1_sender
+                .send(SquareEvent::Sweep(SweepData::new(
+                    self.ch1_register.sweep_change_amount,
+                    self.ch1_register.sweep_direction,
+                    self.ch1_register.sweep_timer_count,
+                    self.ch1_register.sweep_enabled,
+                )))
+                .unwrap();
+        }
+
+        if addr == 0x4002 || addr == 0x4003 {
+            self.ch1_sender
+                .send(SquareEvent::ChangeFrequency(self.ch1_register.frequency))
+                .unwrap();
+        }
 
         if addr == 0x4003 {
             self.ch1_sender.send(SquareEvent::Reset()).unwrap();
@@ -136,36 +147,46 @@ impl NesAPU {
     pub fn write2ch(&mut self, addr: u16, value: u8) {
         self.ch2_register.write(addr, value);
 
-        self.ch2_sender
-            .send(SquareEvent::Note(SquareNote {
-                duty: self.ch2_register.duty,
-            }))
-            .unwrap();
+        if addr == 0x4004 {
+            self.ch2_sender
+                .send(SquareEvent::Note(SquareNote {
+                    duty: self.ch2_register.duty,
+                }))
+                .unwrap();
+            self.ch2_sender
+                .send(SquareEvent::Envelope(EnvelopeData::new(
+                    self.ch2_register.volume,
+                    self.ch2_register.envelope_flag,
+                    !self.ch2_register.key_off_counter_flag,
+                )))
+                .unwrap();
+        }
 
-        self.ch2_sender
-            .send(SquareEvent::Envelope(EnvelopeData::new(
-                self.ch2_register.volume,
-                self.ch2_register.envelope_flag,
-                !self.ch2_register.key_off_counter_flag,
-            )))
-            .unwrap();
+        if addr == 0x4004 || addr == 0x4007 {
+            self.ch2_sender
+                .send(SquareEvent::LengthCounter(LengthCounterData::new(
+                    self.ch2_register.key_off_count,
+                    self.ch2_register.key_off_counter_flag,
+                )))
+                .unwrap();
+        }
 
-        self.ch2_sender
-            .send(SquareEvent::LengthCounter(LengthCounterData::new(
-                self.ch2_register.key_off_count,
-                self.ch2_register.key_off_counter_flag,
-            )))
-            .unwrap();
+        if addr == 0x4005 {
+            self.ch2_sender
+                .send(SquareEvent::Sweep(SweepData::new(
+                    self.ch2_register.sweep_change_amount,
+                    self.ch2_register.sweep_direction,
+                    self.ch2_register.sweep_timer_count,
+                    self.ch2_register.sweep_enabled,
+                )))
+                .unwrap();
+        }
 
-        self.ch2_sender
-            .send(SquareEvent::Sweep(SweepData::new(
-                self.ch2_register.frequency,
-                self.ch2_register.sweep_change_amount,
-                self.ch2_register.sweep_direction,
-                self.ch2_register.sweep_timer_count,
-                self.ch2_register.sweep_enabled,
-            )))
-            .unwrap();
+        if addr == 0x4006 || addr == 0x4007 {
+            self.ch2_sender
+                .send(SquareEvent::ChangeFrequency(self.ch2_register.frequency))
+                .unwrap();
+        }
 
         if addr == 0x4007 {
             self.ch2_sender.send(SquareEvent::Reset()).unwrap();
@@ -793,22 +814,14 @@ static LENGTH_COUNTER_TABLE: [u8; 32] = [
 ];
 #[derive(Debug, Clone, PartialEq)]
 struct SweepData {
-    frequency: u16,
     change_amount: u8,
     direction: u8,
     timer_count: u8,
     enabled: bool,
 }
 impl SweepData {
-    fn new(
-        frequency: u16,
-        change_amount: u8,
-        direction: u8,
-        timer_count: u8,
-        enabled: bool,
-    ) -> Self {
+    fn new(change_amount: u8, direction: u8, timer_count: u8, enabled: bool) -> Self {
         SweepData {
-            frequency,
             change_amount,
             direction,
             timer_count,
@@ -826,7 +839,7 @@ struct Sweep {
 impl Sweep {
     fn new() -> Self {
         Sweep {
-            data: SweepData::new(0, 0, 0, 0, false),
+            data: SweepData::new(0, 0, 0, false),
             frequency: 0,
             counter: 0,
         }
@@ -873,7 +886,7 @@ impl Sweep {
     }
 
     fn reset(&mut self) {
-        self.frequency = self.data.frequency;
+        // self.frequency = self.data.frequency;
         self.counter = 0;
     }
 }
@@ -891,6 +904,7 @@ enum SquareEvent {
     EnvelopeTick(),
     LengthCounter(LengthCounterData),
     LengthCounterTick(),
+    ChangeFrequency(u16),
     Sweep(SweepData),
     SweepTick(),
     Reset(),
@@ -950,7 +964,12 @@ impl AudioCallback for SquareWave {
                             .send(ChannelEvent::LengthCounter(self.length_counter.counter))
                             .unwrap();
                     }
-                    Ok(SquareEvent::Sweep(s)) => self.sweep.data = s,
+                    Ok(SquareEvent::ChangeFrequency(freq)) => {
+                        self.sweep.frequency = freq;
+                    }
+                    Ok(SquareEvent::Sweep(s)) => {
+                        self.sweep.data = s;
+                    }
                     Ok(SquareEvent::SweepTick()) => self.sweep.tick(&self.length_counter),
                     Ok(SquareEvent::Reset()) => {
                         self.envelope.reset();
