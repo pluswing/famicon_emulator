@@ -196,24 +196,30 @@ impl NesAPU {
     pub fn write3ch(&mut self, addr: u16, value: u8) {
         self.ch3_register.write(addr, value);
 
-        self.ch3_sender
-            .send(TriangleEvent::Note(TriangleNote {
-                frequency: self.ch3_register.frequency,
-            }))
-            .unwrap();
+        if addr == 0x4008 {
+            self.ch3_sender
+                .send(TriangleEvent::LinearCounter(LinearCounterData::new(
+                    self.ch3_register.length,
+                )))
+                .unwrap();
+        }
 
-        self.ch3_sender
-            .send(TriangleEvent::LengthCounter(LengthCounterData::new(
-                self.ch3_register.key_off_count,
-                self.ch3_register.key_off_counter_flag,
-            )))
-            .unwrap();
+        if addr == 0x4008 || addr == 0x400B {
+            self.ch3_sender
+                .send(TriangleEvent::LengthCounter(LengthCounterData::new(
+                    self.ch3_register.key_off_count,
+                    self.ch3_register.key_off_counter_flag,
+                )))
+                .unwrap();
+        }
 
-        self.ch3_sender
-            .send(TriangleEvent::LinearCounter(LinearCounterData::new(
-                self.ch3_register.length,
-            )))
-            .unwrap();
+        if addr == 0x400A || addr == 0x400B {
+            self.ch3_sender
+                .send(TriangleEvent::Note(TriangleNote {
+                    frequency: self.ch3_register.frequency,
+                }))
+                .unwrap();
+        }
 
         if addr == 0x400B {
             self.ch3_sender.send(TriangleEvent::Reset()).unwrap();
@@ -223,27 +229,33 @@ impl NesAPU {
     pub fn write4ch(&mut self, addr: u16, value: u8) {
         self.ch4_register.write(addr, value);
 
-        self.ch4_sender
-            .send(NoiseEvent::Note(NoiseNote {
-                frequency: self.ch4_register.frequency,
-                kind: self.ch4_register.kind,
-            }))
-            .unwrap();
+        if addr == 0x400C {
+            self.ch4_sender
+                .send(NoiseEvent::Envelope(EnvelopeData::new(
+                    self.ch4_register.volume,
+                    self.ch4_register.envelope_flag,
+                    !self.ch4_register.key_off_counter_flag,
+                )))
+                .unwrap();
+        }
 
-        self.ch4_sender
-            .send(NoiseEvent::Envelope(EnvelopeData::new(
-                self.ch4_register.volume,
-                self.ch4_register.envelope_flag,
-                !self.ch4_register.key_off_counter_flag,
-            )))
-            .unwrap();
+        if addr == 0x400C || addr == 0x400F {
+            self.ch4_sender
+                .send(NoiseEvent::LengthCounter(LengthCounterData::new(
+                    self.ch4_register.key_off_count,
+                    self.ch4_register.key_off_counter_flag,
+                )))
+                .unwrap();
+        }
 
-        self.ch4_sender
-            .send(NoiseEvent::LengthCounter(LengthCounterData::new(
-                self.ch4_register.key_off_count,
-                self.ch4_register.key_off_counter_flag,
-            )))
-            .unwrap();
+        if addr == 0x400E {
+            self.ch4_sender
+                .send(NoiseEvent::Note(NoiseNote {
+                    frequency: self.ch4_register.frequency,
+                    kind: self.ch4_register.kind,
+                }))
+                .unwrap();
+        }
 
         if addr == 0x400F {
             self.ch4_sender.send(NoiseEvent::Reset()).unwrap();
@@ -845,7 +857,13 @@ impl Sweep {
         }
     }
 
-    fn tick(&mut self, length_counter: &LengthCounter) {
+    fn tick(&mut self, length_counter: &mut LengthCounter) {
+        self.counter += 1;
+        if self.counter < (self.data.timer_count + 1) {
+            return;
+        }
+        self.counter = 0;
+
         if !self.data.enabled {
             return;
         }
@@ -857,13 +875,6 @@ impl Sweep {
             return;
         }
 
-        self.counter += 1;
-        if self.counter < (self.data.timer_count + 1) {
-            return;
-        }
-
-        self.counter = 0;
-
         if self.data.direction == 0 {
             // しり下がりモード    新しい周期 = 周期 + (周期 >> N)
             self.frequency = self.frequency + (self.frequency >> self.data.change_amount);
@@ -873,8 +884,8 @@ impl Sweep {
         }
 
         // もしチャンネルの周期が8未満か、$7FFより大きくなったなら、スイープを停止し、 チャンネルを無音化します。
-        if self.frequency < 8 || self.frequency >= 0x7FF {
-            self.frequency = 0;
+        if self.frequency < 0x08 || self.frequency > 0x7FF {
+            length_counter.counter = 0;
         }
     }
 
@@ -970,7 +981,7 @@ impl AudioCallback for SquareWave {
                     Ok(SquareEvent::Sweep(s)) => {
                         self.sweep.data = s;
                     }
-                    Ok(SquareEvent::SweepTick()) => self.sweep.tick(&self.length_counter),
+                    Ok(SquareEvent::SweepTick()) => self.sweep.tick(&mut self.length_counter),
                     Ok(SquareEvent::Reset()) => {
                         self.envelope.reset();
                         self.length_counter.reset();
