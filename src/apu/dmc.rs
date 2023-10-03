@@ -7,6 +7,11 @@ use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
 
 use super::ChannelEvent;
 
+static FREQUENCY_TABLE: [u8; 16] = [
+    0x1AC, 0x17C, 0x154, 0x140, 0x11E, 0x0FE, 0x0E2, 0x0D6, 0x0BE, 0x0A0, 0x08E, 0x080, 0x06A,
+    0x054, 0x048, 0x036,
+];
+
 pub struct Ch5Register {
     // 4010
     pub irq_enabled: bool,
@@ -58,6 +63,8 @@ impl Ch5Register {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DmcEvent {
+    ByteCount(u8),
+    Frequency(u8),
     Enable(bool),
     Reset(),
 }
@@ -68,6 +75,8 @@ pub struct DmcWave {
     receiver: Receiver<DmcEvent>,
     sender: Sender<ChannelEvent>,
     enabled: bool,
+
+    byte_count: u16,
 }
 
 impl AudioCallback for DmcWave {
@@ -79,10 +88,74 @@ impl AudioCallback for DmcWave {
                 let res = self.receiver.recv_timeout(Duration::from_millis(0));
                 match res {
                     Ok(DmcEvent::Enable(b)) => self.enabled = b,
+                    Ok(DmcEvent::ByteCount(b)) => {
+                        // FIXME なんかちがう？ %LLLL.LLLL0001 = (L * 16) + 1 バイト
+                        self.byte_count = (((b as u16) << 4) + 1) << 3;
+                    }
+                    Ok(DmcEvent::Frequency(f)) => {}
                     Ok(DmcEvent::Reset()) => {}
                     Err(_) => break,
                 }
             }
+
+            /*
+
+            WaveCh5SampleCounter => byte_count
+            WaveCh5FrequencyData => FREQUENCY_TABLE[frequency_index]
+            tmpWaveBaseCount2 => phase
+            WaveCh5Register => 波形データが入る
+            WaveCh5SampleAddress => start_addr
+            (tmpIO2[0x10] & 0x40) => loop_flag
+            tmpIO2[0x10] & 0x80 => irq_enable
+            WaveCh5DeltaCounter => delta_counter
+
+
+              if(this.WaveCh5SampleCounter !== 0) {
+                    angle = (tmpWaveBaseCount2 / this.WaveCh5FrequencyData[tmpIO2[0x10] & 0x0F]) & 0x1F;
+
+                    // if(this.WaveCh5Angle !== angle) {
+                    //     var ii = this.WaveCh5Angle;
+                    //     var jj = 0;
+                    //     if(ii !== -1) {
+                    //         jj = angle;
+                    //         if(jj < ii)
+                    //             jj += 32;
+                    //     }
+                    //     this.WaveCh5Angle = angle;
+
+                        for(; ii<jj; ii++){
+                            if((this.WaveCh5SampleCounter & 0x0007) === 0) {
+                                if(this.WaveCh5SampleCounter !== 0){
+                                    this.WaveCh5Register = this.ROM[(this.WaveCh5SampleAddress >> 13) + 2][this.WaveCh5SampleAddress & 0x1FFF];
+                                    this.WaveCh5SampleAddress++;
+                                    this.CPUClock += 4;
+                                }
+                            }
+
+                            if(this.WaveCh5SampleCounter !== 0) {
+                                if((this.WaveCh5Register & 0x01) === 0x00) {
+                                    if(this.WaveCh5DeltaCounter > 1)
+                                        this.WaveCh5DeltaCounter -= 2;
+                                } else {
+                                    if(this.WaveCh5DeltaCounter < 126)
+                                        this.WaveCh5DeltaCounter += 2;
+                                }
+                                this.WaveCh5Register >>= 1;
+                                this.WaveCh5SampleCounter--;
+                            }
+                        }
+                    }
+
+                    if(this.WaveCh5SampleCounter === 0) {
+                        if((tmpIO2[0x10] & 0x40) === 0x40)
+                            this.SetCh5Delta();
+                        else
+                            this.toIRQ |= tmpIO2[0x10] & 0x80;
+                    }
+                }
+                return (all_out + this.WaveCh5DeltaCounter) << 5;
+                         */
+
             // TODO
             *x = 0.0;
         }

@@ -267,6 +267,8 @@ impl NesAPU {
 
         // TODO
         // self.ch5_sender.send(...)
+        self.ch5_sender
+            .send(DmcEvent::ByteCount(self.ch5_register.byte_count));
 
         if addr == 0x4013 {
             self.ch5_sender.send(DmcEvent::Reset()).unwrap();
