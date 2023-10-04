@@ -5,7 +5,7 @@ use std::{
 
 use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
 
-use super::ChannelEvent;
+use super::{ChannelEvent, NES_CPU_CLOCK};
 
 static FREQUENCY_TABLE: [u8; 16] = [
     0x1AC, 0x17C, 0x154, 0x140, 0x11E, 0x0FE, 0x0E2, 0x0D6, 0x0BE, 0x0A0, 0x08E, 0x080, 0x06A,
@@ -77,6 +77,9 @@ pub struct DmcWave {
     enabled: bool,
 
     byte_count: u16,
+    frequency: f32,
+    delta_counter: usize,
+    wave_data: Vec<u8>,
 }
 
 impl AudioCallback for DmcWave {
@@ -92,7 +95,9 @@ impl AudioCallback for DmcWave {
                         // FIXME なんかちがう？ %LLLL.LLLL0001 = (L * 16) + 1 バイト
                         self.byte_count = (((b as u16) << 4) + 1) << 3;
                     }
-                    Ok(DmcEvent::Frequency(f)) => {}
+                    Ok(DmcEvent::Frequency(f)) => {
+                        self.frequency = NES_CPU_CLOCK / FREQUENCY_TABLE[f as usize] as f32
+                    }
                     Ok(DmcEvent::Reset()) => {}
                     Err(_) => break,
                 }
@@ -101,10 +106,11 @@ impl AudioCallback for DmcWave {
             /*
 
             WaveCh5SampleCounter => byte_count
-            WaveCh5FrequencyData => FREQUENCY_TABLE[frequency_index]
-            tmpWaveBaseCount2 => phase
-            WaveCh5Register => 波形データが入る
             WaveCh5SampleAddress => start_addr
+
+            WaveCh5FrequencyData => FREQUENCY_TABLE[frequency_index]
+            ok tmpWaveBaseCount2 => phase
+            WaveCh5Register => wave_data (新設)
             (tmpIO2[0x10] & 0x40) => loop_flag
             tmpIO2[0x10] & 0x80 => irq_enable
             WaveCh5DeltaCounter => delta_counter
@@ -124,6 +130,7 @@ impl AudioCallback for DmcWave {
                     //     this.WaveCh5Angle = angle;
 
                         for(; ii<jj; ii++){
+                          // LOAD ROM
                             if((this.WaveCh5SampleCounter & 0x0007) === 0) {
                                 if(this.WaveCh5SampleCounter !== 0){
                                     this.WaveCh5Register = this.ROM[(this.WaveCh5SampleAddress >> 13) + 2][this.WaveCh5SampleAddress & 0x1FFF];
@@ -132,6 +139,7 @@ impl AudioCallback for DmcWave {
                                 }
                             }
 
+                            ※　移植完了
                             if(this.WaveCh5SampleCounter !== 0) {
                                 if((this.WaveCh5Register & 0x01) === 0x00) {
                                     if(this.WaveCh5DeltaCounter > 1)
@@ -156,8 +164,25 @@ impl AudioCallback for DmcWave {
                 return (all_out + this.WaveCh5DeltaCounter) << 5;
                          */
 
-            // TODO
-            *x = 0.0;
+            if self.byte_count != 0 {
+                // TODO LOAD ROM ==> apu.rs側でやる
+
+                let mut cur = self.wave_data[self.wave_data.len() - self.byte_count as usize];
+                if cur & 0x01 == 0x00 {
+                    if self.delta_counter > 1 {
+                        self.delta_counter -= 2
+                    }
+                } else {
+                    if self.delta_counter < 126 {
+                        self.delta_counter += 2
+                    }
+                }
+                cur = cur >> 1;
+                self.byte_count -= 1;
+            } else {
+                *x = 0.0;
+            }
+            self.phase = (self.phase + self.frequency / self.freq) % 1.0;
         }
     }
 }

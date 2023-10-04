@@ -265,10 +265,17 @@ impl NesAPU {
     pub fn write5ch(&mut self, addr: u16, value: u8) {
         self.ch5_register.write(addr, value);
 
-        // TODO
-        // self.ch5_sender.send(...)
-        self.ch5_sender
-            .send(DmcEvent::ByteCount(self.ch5_register.byte_count));
+        if addr == 0x4013 {
+            self.ch5_sender
+                .send(DmcEvent::ByteCount(self.ch5_register.byte_count))
+                .unwrap();
+        }
+
+        if addr == 0x4010 {
+            self.ch5_sender
+                .send(DmcEvent::Frequency(self.ch5_register.frequency_index))
+                .unwrap();
+        }
 
         if addr == 0x4013 {
             self.ch5_sender.send(DmcEvent::Reset()).unwrap();
