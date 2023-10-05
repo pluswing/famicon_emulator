@@ -5,6 +5,8 @@ use std::{
 
 use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
 
+use crate::MAPPER;
+
 use super::{ChannelEvent, NES_CPU_CLOCK};
 
 static FREQUENCY_TABLE: [u8; 16] = [
@@ -63,8 +65,13 @@ impl Ch5Register {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DmcEvent {
-    ByteCount(u8),
+    IrqEnable(bool),
+    Loop(bool),
     Frequency(u8),
+    Delta(u8),
+    StartAddr(u8),
+    ByteCount(u8),
+
     Enable(bool),
     Reset(),
 }
@@ -76,10 +83,14 @@ pub struct DmcWave {
     sender: Sender<ChannelEvent>,
     enabled: bool,
 
-    byte_count: u16,
-    frequency: f32,
-    delta_counter: usize,
-    wave_data: Vec<u8>,
+    irq_enabled: bool,
+    loop_flag: bool,
+    frequency_index: u8,
+    delta_counter: u8,
+    start_addr: u8,
+    byte_count: u8,
+
+    data: u8,
 }
 
 impl AudioCallback for DmcWave {
@@ -91,12 +102,21 @@ impl AudioCallback for DmcWave {
                 let res = self.receiver.recv_timeout(Duration::from_millis(0));
                 match res {
                     Ok(DmcEvent::Enable(b)) => self.enabled = b,
-                    Ok(DmcEvent::ByteCount(b)) => {
-                        // FIXME なんかちがう？ %LLLL.LLLL0001 = (L * 16) + 1 バイト
-                        self.byte_count = (((b as u16) << 4) + 1) << 3;
+                    Ok(DmcEvent::IrqEnable(b)) => {
+                        self.irq_enabled = b;
                     }
-                    Ok(DmcEvent::Frequency(f)) => {
-                        self.frequency = NES_CPU_CLOCK / FREQUENCY_TABLE[f as usize] as f32
+                    Ok(DmcEvent::Loop(b)) => {
+                        self.loop_flag = b;
+                    }
+                    Ok(DmcEvent::Frequency(f)) => self.frequency_index = f,
+                    Ok(DmcEvent::Delta(d)) => {
+                        self.delta_counter = d;
+                    }
+                    Ok(DmcEvent::StartAddr(s)) => {
+                        self.start_addr = s;
+                    }
+                    Ok(DmcEvent::ByteCount(b)) => {
+                        self.byte_count = b;
                     }
                     Ok(DmcEvent::Reset()) => {}
                     Err(_) => break,
@@ -110,7 +130,7 @@ impl AudioCallback for DmcWave {
 
             WaveCh5FrequencyData => FREQUENCY_TABLE[frequency_index]
             ok tmpWaveBaseCount2 => phase
-            WaveCh5Register => wave_data (新設)
+            WaveCh5Register => data (新設)
             (tmpIO2[0x10] & 0x40) => loop_flag
             tmpIO2[0x10] & 0x80 => irq_enable
             WaveCh5DeltaCounter => delta_counter
@@ -165,9 +185,19 @@ impl AudioCallback for DmcWave {
                          */
 
             if self.byte_count != 0 {
-                // TODO LOAD ROM ==> apu.rs側でやる
+                if self.byte_count & 0x0007 == 0 {
+                    if self.byte_count != 0 {
+                        unsafe {
+                            self.data = MAPPER.read_prg_rom(self.start_addr as u16);
+                            // TODO 計算
+                        };
+                        self.start_addr += 1;
+                        // this.CPUClock += 4;
+                    }
+                }
 
-                let mut cur = self.wave_data[self.wave_data.len() - self.byte_count as usize];
+                let mut cur = self.data;
+                // TODO みなおし
                 if cur & 0x01 == 0x00 {
                     if self.delta_counter > 1 {
                         self.delta_counter -= 2
@@ -212,6 +242,12 @@ pub fn init_dmc(
             receiver: receiver,
             sender: sender2,
             enabled: true,
+            irq_enabled: false,
+            loop_flag: false,
+            frequency_index: 0,
+            delta_counter: 0,
+            start_addr: 0,
+            byte_count: 0,
         })
         .unwrap();
 
