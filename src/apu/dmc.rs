@@ -9,7 +9,7 @@ use crate::MAPPER;
 
 use super::{ChannelEvent, NES_CPU_CLOCK};
 
-static FREQUENCY_TABLE: [u8; 16] = [
+static FREQUENCY_TABLE: [u16; 16] = [
     0x1AC, 0x17C, 0x154, 0x140, 0x11E, 0x0FE, 0x0E2, 0x0D6, 0x0BE, 0x0A0, 0x08E, 0x080, 0x06A,
     0x054, 0x048, 0x036,
 ];
@@ -91,6 +91,9 @@ pub struct DmcWave {
     byte_count: u8,
 
     data: u8,
+    frequency: f32,
+    sample_addr: u16,
+    counter: u32,
 }
 
 impl AudioCallback for DmcWave {
@@ -108,15 +111,20 @@ impl AudioCallback for DmcWave {
                     Ok(DmcEvent::Loop(b)) => {
                         self.loop_flag = b;
                     }
-                    Ok(DmcEvent::Frequency(f)) => self.frequency_index = f,
+                    Ok(DmcEvent::Frequency(f)) => {
+                        self.frequency_index = f;
+                        self.frequency = NES_CPU_CLOCK / FREQUENCY_TABLE[f as usize] as f32;
+                    }
                     Ok(DmcEvent::Delta(d)) => {
                         self.delta_counter = d;
                     }
                     Ok(DmcEvent::StartAddr(s)) => {
                         self.start_addr = s;
+                        self.sample_addr = s as u16 * 0x40 + 0xC000
                     }
                     Ok(DmcEvent::ByteCount(b)) => {
                         self.byte_count = b;
+                        self.counter = (b * 8) as u32 * 0x10 + 1;
                     }
                     Ok(DmcEvent::Reset()) => {}
                     Err(_) => break,
@@ -184,36 +192,58 @@ impl AudioCallback for DmcWave {
                 return (all_out + this.WaveCh5DeltaCounter) << 5;
                          */
 
-            if self.byte_count != 0 {
-                if self.byte_count & 0x0007 == 0 {
-                    if self.byte_count != 0 {
+            if self.counter != 0 {
+                if self.counter & 0x0007 == 0 {
+                    if self.counter != 0 {
                         unsafe {
-                            self.data = MAPPER.read_prg_rom(self.start_addr as u16);
-                            // TODO 計算
+                            self.data = MAPPER.read_prg_rom(self.sample_addr);
                         };
-                        self.start_addr += 1;
-                        // this.CPUClock += 4;
+                        if self.sample_addr == 0xFFFF {
+                            self.sample_addr = 0x8000;
+                        } else {
+                            self.sample_addr += 1;
+                        }
                     }
                 }
 
-                let mut cur = self.data;
-                // TODO みなおし
-                if cur & 0x01 == 0x00 {
-                    if self.delta_counter > 1 {
-                        self.delta_counter -= 2
+                if self.counter != 0 {
+                    if self.data & 0x01 == 0x00 {
+                        if self.delta_counter > 1 {
+                            self.delta_counter -= 2
+                        }
+                    } else {
+                        if self.delta_counter < 126 {
+                            self.delta_counter += 2
+                        }
                     }
-                } else {
-                    if self.delta_counter < 126 {
-                        self.delta_counter += 2
+                    self.data = self.data >> 1;
+                    self.counter -= 1;
+                }
+
+                if self.counter == 0 {
+                    if self.loop_flag {
+                        self.set_delta();
+                    } else {
+                        if self.irq_enabled {
+                            // TODO IRQを発生させる
+                        }
                     }
                 }
-                cur = cur >> 1;
-                self.byte_count -= 1;
             } else {
                 *x = 0.0;
             }
             self.phase = (self.phase + self.frequency / self.freq) % 1.0;
         }
+    }
+}
+
+impl DmcWave {
+    fn set_delta(&mut self) {
+        self.delta_counter = self.delta_counter;
+        self.sample_addr = self.start_addr as u16 * 0x40 + 0xC000;
+        self.counter = (self.byte_count * 8) as u32 * 0x10 + 1;
+        self.data = 0;
+        // self.toIRQ &= ~0x80;
     }
 }
 
@@ -248,6 +278,10 @@ pub fn init_dmc(
             delta_counter: 0,
             start_addr: 0,
             byte_count: 0,
+            data: 0,
+            frequency: NES_CPU_CLOCK / FREQUENCY_TABLE[0] as f32,
+            sample_addr: 0xC000,
+            counter: (0 * 8) as u32 * 0x10 + 1,
         })
         .unwrap();
 
