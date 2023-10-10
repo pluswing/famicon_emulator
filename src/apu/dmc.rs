@@ -191,8 +191,14 @@ impl AudioCallback for DmcWave {
                 }
                 return (all_out + this.WaveCh5DeltaCounter) << 5;
                          */
+            let last_phase = self.phase;
+            self.phase = (self.phase + self.frequency / self.freq) % 1.0;
 
-            if self.counter != 0 {
+            if last_phase > self.phase {
+                if self.counter == 0 {
+                    *x = 0.0;
+                    continue;
+                }
                 if self.counter & 0x0007 == 0 {
                     if self.counter != 0 {
                         unsafe {
@@ -229,10 +235,13 @@ impl AudioCallback for DmcWave {
                         }
                     }
                 }
-            } else {
-                *x = 0.0;
             }
-            self.phase = (self.phase + self.frequency / self.freq) % 1.0;
+            if self.delta_counter == 0 {
+                *x = 0.0;
+            } else {
+                *x = (self.delta_counter as f32 - 64.0) / 64.0;
+                println!("DC = {} x = {} c = {}", self.delta_counter, x, self.counter);
+            }
         }
     }
 }
@@ -262,7 +271,7 @@ pub fn init_dmc(
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
         channels: Some(1),
-        samples: None,
+        samples: Some(2),
     };
 
     let device = audio_subsystem
@@ -277,7 +286,7 @@ pub fn init_dmc(
             frequency_index: 0,
             delta_counter: 0,
             start_addr: 0,
-            byte_count: 0,
+            byte_count: 1,
             data: 0,
             frequency: NES_CPU_CLOCK / FREQUENCY_TABLE[0] as f32,
             sample_addr: 0xC000,

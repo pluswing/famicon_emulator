@@ -304,9 +304,12 @@ impl Mapper for SxRom {
 
     fn mirroring(&self) -> Mirroring {
         match self.control & 0x03 {
+            // 0: one-screen, lower bank;
+            // 1: one-screen, upper bank;
+            0 => Mirroring::VERTICAL, // FIXME ロックマン2のために追加。本来はone-screenの実装が必要。
             2 => Mirroring::VERTICAL,
             3 => Mirroring::HORIZONTAL,
-            _ => panic!("not support mirroring mode."),
+            _ => panic!("not support mirroring mode. {}", self.control & 0x03),
         }
     }
 

@@ -264,6 +264,7 @@ impl NesAPU {
 
     pub fn write5ch(&mut self, addr: u16, value: u8) {
         self.ch5_register.write(addr, value);
+        println!("5CH {:04X} => {:02X}", addr, value);
 
         if addr == 0x4010 {
             self.ch5_sender
