@@ -264,7 +264,6 @@ impl NesAPU {
 
     pub fn write5ch(&mut self, addr: u16, value: u8) {
         self.ch5_register.write(addr, value);
-        println!("5CH {:04X} => {:02X}", addr, value);
 
         if addr == 0x4010 {
             self.ch5_sender
@@ -1251,6 +1250,7 @@ struct NoiseWave {
     note: NoiseNote,
     length_counter: LengthCounter,
     sound_table: Vec<f32>,
+    value: bool,
 }
 
 impl AudioCallback for NoiseWave {
@@ -1263,20 +1263,6 @@ impl AudioCallback for NoiseWave {
                 match res {
                     Ok(NoiseEvent::Note(note)) => {
                         self.note = note;
-                        let freq = NOISE_TABLE[self.note.frequency as usize] as i32;
-                        let mut v: bool = false;
-                        self.sound_table = (0..NES_CPU_CLOCK as i32)
-                            .map(|i| {
-                                if i % freq == 0 {
-                                    v = if self.note.is_long() {
-                                        self.long_random.next()
-                                    } else {
-                                        self.short_random.next()
-                                    };
-                                }
-                                return if v { 0.0 } else { 1.0 };
-                            })
-                            .collect()
                     }
                     Ok(NoiseEvent::Enable(b)) => self.enabled = b,
                     Ok(NoiseEvent::Envelope(e)) => {
@@ -1299,13 +1285,7 @@ impl AudioCallback for NoiseWave {
                 }
             }
 
-            *x = if self.sound_table.len() == 0 {
-                0.0
-            } else {
-                self.sound_table[((NES_CPU_CLOCK - 0.5) * (self.phase / self.freq)) as usize]
-                    * self.envelope.volume()
-                    * MASTER_VOLUME
-            };
+            *x = if self.value { 0.0 } else { 1.0 } * self.envelope.volume() * MASTER_VOLUME;
 
             if self.length_counter.mute() {
                 *x = 0.0;
@@ -1315,7 +1295,29 @@ impl AudioCallback for NoiseWave {
                 *x = 0.0;
             }
 
-            self.phase = (self.phase + 1.0) % self.freq;
+            let last_phase = self.phase;
+            let mut add = self.note.hz() / self.freq;
+            self.phase = (self.phase + add) % 1.0;
+
+            loop {
+                if add < 1.0 {
+                    break;
+                }
+                add -= 1.0;
+                self.value = if self.note.is_long() {
+                    self.long_random.next()
+                } else {
+                    self.short_random.next()
+                }
+            }
+
+            if self.phase < last_phase {
+                self.value = if self.note.is_long() {
+                    self.long_random.next()
+                } else {
+                    self.short_random.next()
+                }
+            }
         }
     }
 }

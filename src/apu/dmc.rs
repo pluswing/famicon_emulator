@@ -7,7 +7,7 @@ use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
 
 use crate::MAPPER;
 
-use super::{ChannelEvent, NES_CPU_CLOCK};
+use super::{ChannelEvent, MASTER_VOLUME, NES_CPU_CLOCK};
 
 static FREQUENCY_TABLE: [u16; 16] = [
     0x1AC, 0x17C, 0x154, 0x140, 0x11E, 0x0FE, 0x0E2, 0x0D6, 0x0BE, 0x0A0, 0x08E, 0x080, 0x06A,
@@ -117,6 +117,9 @@ impl AudioCallback for DmcWave {
                     }
                     Ok(DmcEvent::Delta(d)) => {
                         self.delta_counter = d;
+                        // 仮置き
+                        self.byte_count = 1;
+                        self.counter = (1 * 8) as u32 * 0x10 + 1;
                     }
                     Ok(DmcEvent::StartAddr(s)) => {
                         self.start_addr = s;
@@ -131,66 +134,6 @@ impl AudioCallback for DmcWave {
                 }
             }
 
-            /*
-
-            WaveCh5SampleCounter => byte_count
-            WaveCh5SampleAddress => start_addr
-
-            WaveCh5FrequencyData => FREQUENCY_TABLE[frequency_index]
-            ok tmpWaveBaseCount2 => phase
-            WaveCh5Register => data (新設)
-            (tmpIO2[0x10] & 0x40) => loop_flag
-            tmpIO2[0x10] & 0x80 => irq_enable
-            WaveCh5DeltaCounter => delta_counter
-
-
-              if(this.WaveCh5SampleCounter !== 0) {
-                    angle = (tmpWaveBaseCount2 / this.WaveCh5FrequencyData[tmpIO2[0x10] & 0x0F]) & 0x1F;
-
-                    // if(this.WaveCh5Angle !== angle) {
-                    //     var ii = this.WaveCh5Angle;
-                    //     var jj = 0;
-                    //     if(ii !== -1) {
-                    //         jj = angle;
-                    //         if(jj < ii)
-                    //             jj += 32;
-                    //     }
-                    //     this.WaveCh5Angle = angle;
-
-                        for(; ii<jj; ii++){
-                          // LOAD ROM
-                            if((this.WaveCh5SampleCounter & 0x0007) === 0) {
-                                if(this.WaveCh5SampleCounter !== 0){
-                                    this.WaveCh5Register = this.ROM[(this.WaveCh5SampleAddress >> 13) + 2][this.WaveCh5SampleAddress & 0x1FFF];
-                                    this.WaveCh5SampleAddress++;
-                                    this.CPUClock += 4;
-                                }
-                            }
-
-                            ※　移植完了
-                            if(this.WaveCh5SampleCounter !== 0) {
-                                if((this.WaveCh5Register & 0x01) === 0x00) {
-                                    if(this.WaveCh5DeltaCounter > 1)
-                                        this.WaveCh5DeltaCounter -= 2;
-                                } else {
-                                    if(this.WaveCh5DeltaCounter < 126)
-                                        this.WaveCh5DeltaCounter += 2;
-                                }
-                                this.WaveCh5Register >>= 1;
-                                this.WaveCh5SampleCounter--;
-                            }
-                        }
-                    }
-
-                    if(this.WaveCh5SampleCounter === 0) {
-                        if((tmpIO2[0x10] & 0x40) === 0x40)
-                            this.SetCh5Delta();
-                        else
-                            this.toIRQ |= tmpIO2[0x10] & 0x80;
-                    }
-                }
-                return (all_out + this.WaveCh5DeltaCounter) << 5;
-                         */
             let last_phase = self.phase;
             self.phase = (self.phase + self.frequency / self.freq) % 1.0;
 
@@ -236,11 +179,10 @@ impl AudioCallback for DmcWave {
                     }
                 }
             }
-            if self.delta_counter == 0 {
+            if self.delta_counter == 0 || self.counter == 0 {
                 *x = 0.0;
             } else {
-                *x = (self.delta_counter as f32 - 64.0) / 64.0;
-                println!("DC = {} x = {} c = {}", self.delta_counter, x, self.counter);
+                *x = ((self.delta_counter as f32 - 64.0) / 64.0) * MASTER_VOLUME;
             }
         }
     }

@@ -649,6 +649,8 @@ impl Mapper for Mapper4 {
     fn write_prg_ram(&mut self, addr: u16, data: u8) {
         self.prg_ram[addr as usize - 0x6000] = data;
 
+        // TODO 書き込み軽減措置を入れたほうが良い。
+        // ex: 1秒間なにもなければ、実際に書き込む。
         let mut file = File::create(self.rom.save_data_file.as_str()).unwrap();
         file.write_all(&self.prg_ram).unwrap();
         file.flush().unwrap();
