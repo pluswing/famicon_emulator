@@ -95,9 +95,9 @@ fn main() {
     let rom = load_rom("rom/Yoshi no Tamago (Japan).nes");
     let rom = load_rom("rom/Super Mario Bros. 3 (Japan) (Rev 1).nes");
     let rom = load_rom("rom/Mother (Japan).nes");
-    let rom = mario_rom();
     let rom = load_rom("rom/Rockman 2 - Dr. Wily no Nazo (Japan).nes");
     let rom = load_rom("rom/Final Fantasy III (Japan).nes");
+    let rom = mario_rom();
 
     info!(
         "ROM: mapper={}, submapper={}, mirroring={:?} chr_ram={}",

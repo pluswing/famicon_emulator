@@ -118,8 +118,8 @@ impl AudioCallback for DmcWave {
                     Ok(DmcEvent::Delta(d)) => {
                         self.delta_counter = d;
                         // 仮置き
-                        self.byte_count = 1;
-                        self.counter = (1 * 8) as u32 * 0x10 + 1;
+                        // self.byte_count = 1;
+                        // self.counter = (1 * 8) as u32 * 0x10 + 1;
                     }
                     Ok(DmcEvent::StartAddr(s)) => {
                         self.start_addr = s;

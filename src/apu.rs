@@ -345,6 +345,14 @@ impl NesAPU {
                 self.status.contains(StatusRegister::ENABLE_5CH),
             ))
             .unwrap();
+
+        // TODO 移植する
+        // if ((tmp & 0x10) !== 0x10) {
+        //   this.WaveCh5SampleCounter = 0;
+        //   this.toIRQ &= ~0x80;
+        // } else if (this.WaveCh5SampleCounter === 0) {
+        //   this.SetCh5Delta();
+        // }
     }
 
     pub fn irq(&self) -> bool {
@@ -1242,14 +1250,11 @@ struct NoiseWave {
     phase: f32,
     receiver: Receiver<NoiseEvent>,
     sender: Sender<ChannelEvent>,
-    long_random: NoiseRandom,
-    short_random: NoiseRandom,
-
+    random: NoiseRandom,
     enabled: bool,
     envelope: Envelope,
     note: NoiseNote,
     length_counter: LengthCounter,
-    sound_table: Vec<f32>,
     value: bool,
 }
 
@@ -1261,9 +1266,7 @@ impl AudioCallback for NoiseWave {
             loop {
                 let res = self.receiver.recv_timeout(Duration::from_millis(0));
                 match res {
-                    Ok(NoiseEvent::Note(note)) => {
-                        self.note = note;
-                    }
+                    Ok(NoiseEvent::Note(note)) => self.note = note,
                     Ok(NoiseEvent::Enable(b)) => self.enabled = b,
                     Ok(NoiseEvent::Envelope(e)) => {
                         self.envelope.data = e;
@@ -1304,42 +1307,30 @@ impl AudioCallback for NoiseWave {
                     break;
                 }
                 add -= 1.0;
-                self.value = if self.note.is_long() {
-                    self.long_random.next()
-                } else {
-                    self.short_random.next()
-                }
+                self.value = self.random.next(self.note.is_long())
             }
 
             if self.phase < last_phase {
-                self.value = if self.note.is_long() {
-                    self.long_random.next()
-                } else {
-                    self.short_random.next()
-                }
+                self.value = self.random.next(self.note.is_long())
             }
         }
     }
 }
 
 struct NoiseRandom {
-    bit: u8,
     value: u16,
 }
 
 impl NoiseRandom {
-    pub fn long() -> Self {
-        NoiseRandom { bit: 1, value: 1 }
+    pub fn new() -> Self {
+        NoiseRandom { value: 1 }
     }
 
-    pub fn short() -> Self {
-        NoiseRandom { bit: 6, value: 1 }
-    }
-
-    pub fn next(&mut self) -> bool {
+    pub fn next(&mut self, is_long: bool) -> bool {
         // 15ビットシフトレジスタにはリセット時に1をセットしておく必要があります。 タイマによってシフトレジスタが励起されるたびに1ビット右シフトし、 ビット14には、ショートモード時にはビット0とビット6のEORを、 ロングモード時にはビット0とビット1のEORを入れます。
         // ロングモード時にはビット0とビット1のEORを入れます。
-        let b = (self.value & 0x01) ^ ((self.value >> self.bit) & 0x01);
+        let bit = if is_long { 1 } else { 6 };
+        let b = (self.value & 0x01) ^ ((self.value >> bit) & 0x01);
         self.value = self.value >> 1;
         self.value = self.value & 0b011_1111_1111_1111 | b << 14;
 
@@ -1372,13 +1363,12 @@ fn init_noise(
             phase: 0.0,
             receiver: receiver,
             sender: sender2,
-            long_random: NoiseRandom::long(),
-            short_random: NoiseRandom::short(),
+            random: NoiseRandom::new(),
             enabled: true,
             envelope: Envelope::new(),
             note: NoiseNote::new(),
             length_counter: LengthCounter::new(),
-            sound_table: vec![],
+            value: false,
         })
         .unwrap();
 
