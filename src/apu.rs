@@ -23,27 +23,27 @@ pub struct NesAPU {
     ch1_device: AudioDevice<SquareWave>,
     ch1_sender: Sender<SquareEvent>,
     ch1_receiver: Receiver<ChannelEvent>,
-    ch1_lenght_count: u8,
+    ch1_lenght_count: u32,
 
     ch2_device: AudioDevice<SquareWave>,
     ch2_sender: Sender<SquareEvent>,
     ch2_receiver: Receiver<ChannelEvent>,
-    ch2_lenght_count: u8,
+    ch2_lenght_count: u32,
 
     ch3_device: AudioDevice<TriangleWave>,
     ch3_sender: Sender<TriangleEvent>,
     ch3_receiver: Receiver<ChannelEvent>,
-    ch3_lenght_count: u8,
+    ch3_lenght_count: u32,
 
     ch4_device: AudioDevice<NoiseWave>,
     ch4_sender: Sender<NoiseEvent>,
     ch4_receiver: Receiver<ChannelEvent>,
-    ch4_lenght_count: u8,
+    ch4_lenght_count: u32,
 
     ch5_device: AudioDevice<DmcWave>,
     ch5_sender: Sender<DmcEvent>,
     ch5_receiver: Receiver<ChannelEvent>,
-    ch5_lenght_count: u8,
+    ch5_lenght_count: u32,
 }
 
 const NES_CPU_CLOCK: f32 = 1_789_772.5; // 1.78MHz
@@ -200,6 +200,7 @@ impl NesAPU {
             self.ch3_sender
                 .send(TriangleEvent::LinearCounter(LinearCounterData::new(
                     self.ch3_register.length,
+                    self.ch3_register.key_off_counter_flag,
                 )))
                 .unwrap();
         }
@@ -346,7 +347,7 @@ impl NesAPU {
             ))
             .unwrap();
 
-        // TODO 移植する
+        // TODO
         // if ((tmp & 0x10) !== 0x10) {
         //   this.WaveCh5SampleCounter = 0;
         //   this.toIRQ &= ~0x80;
@@ -819,10 +820,11 @@ impl LengthCounter {
 #[derive(Debug, Clone, PartialEq)]
 struct LinearCounterData {
     count: u8, // 元のカウント値
+    enabled: bool,
 }
 impl LinearCounterData {
-    fn new(count: u8) -> Self {
-        LinearCounterData { count }
+    fn new(count: u8, enabled: bool) -> Self {
+        LinearCounterData { count, enabled }
     }
 }
 
@@ -835,12 +837,15 @@ struct LinearCounter {
 impl LinearCounter {
     fn new() -> Self {
         LinearCounter {
-            data: LinearCounterData::new(0),
+            data: LinearCounterData::new(0, false),
             counter: 0,
         }
     }
 
     fn tick(&mut self) {
+        if !self.data.enabled {
+            return;
+        }
         if self.counter > 0 {
             self.counter -= 1;
         }
@@ -939,7 +944,7 @@ impl Sweep {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChannelEvent {
-    LengthCounter(u8),
+    LengthCounter(u32),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1007,7 +1012,9 @@ impl AudioCallback for SquareWave {
                     Ok(SquareEvent::LengthCounterTick()) => {
                         self.length_counter.tick();
                         self.sender
-                            .send(ChannelEvent::LengthCounter(self.length_counter.counter))
+                            .send(ChannelEvent::LengthCounter(
+                                self.length_counter.counter as u32,
+                            ))
                             .unwrap();
                     }
                     Ok(SquareEvent::ChangeFrequency(freq)) => {
@@ -1134,10 +1141,15 @@ impl AudioCallback for TriangleWave {
                     Ok(TriangleEvent::LengthCounterTick()) => {
                         self.length_counter.tick();
                         self.sender
-                            .send(ChannelEvent::LengthCounter(self.length_counter.counter))
+                            .send(ChannelEvent::LengthCounter(
+                                self.length_counter.counter as u32,
+                            ))
                             .unwrap();
                     }
-                    Ok(TriangleEvent::LinearCounter(l)) => self.linear_counter.data = l,
+                    Ok(TriangleEvent::LinearCounter(l)) => {
+                        self.linear_counter.data = l;
+                        self.linear_counter.reset();
+                    }
                     Ok(TriangleEvent::LinearCounterTick()) => {
                         self.linear_counter.tick();
                     }
@@ -1276,7 +1288,9 @@ impl AudioCallback for NoiseWave {
                     Ok(NoiseEvent::LengthCounterTick()) => {
                         self.length_counter.tick();
                         self.sender
-                            .send(ChannelEvent::LengthCounter(self.length_counter.counter))
+                            .send(ChannelEvent::LengthCounter(
+                                self.length_counter.counter as u32,
+                            ))
                             .unwrap();
                     }
                     Ok(NoiseEvent::Reset()) => {

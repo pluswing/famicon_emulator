@@ -118,8 +118,8 @@ impl AudioCallback for DmcWave {
                     Ok(DmcEvent::Delta(d)) => {
                         self.delta_counter = d;
                         // 仮置き
-                        // self.byte_count = 1;
-                        // self.counter = (1 * 8) as u32 * 0x10 + 1;
+                        self.byte_count = 1;
+                        self.counter = (1 * 8) as u32 * 0x10 + 1;
                     }
                     Ok(DmcEvent::StartAddr(s)) => {
                         self.start_addr = s;
@@ -167,6 +167,9 @@ impl AudioCallback for DmcWave {
                     }
                     self.data = self.data >> 1;
                     self.counter -= 1;
+                    self.sender
+                        .send(ChannelEvent::LengthCounter(self.counter))
+                        .unwrap();
                 }
 
                 if self.counter == 0 {
@@ -183,6 +186,10 @@ impl AudioCallback for DmcWave {
                 *x = 0.0;
             } else {
                 *x = ((self.delta_counter as f32 - 64.0) / 64.0) * MASTER_VOLUME;
+            }
+
+            if !self.enabled {
+                *x = 0.0;
             }
         }
     }
