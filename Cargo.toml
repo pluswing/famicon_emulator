@@ -13,6 +13,7 @@ midir = "0.9.1"
 once_cell = "1.18.0"
 rand = "0.8.5"
 sdl2 = "0.35.2"
+ctrlc = "3.2.5"
 
 [[bin]]
 name = "main"
@@ -21,3 +22,7 @@ path = "src/main.rs"
 [[bin]]
 name = "sound_test"
 path = "src/sound_test.rs"
+
+[[bin]]
+name = "launchpad"
+path = "src/launchpad.rs"
