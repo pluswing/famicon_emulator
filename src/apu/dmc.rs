@@ -7,7 +7,12 @@ use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
 
 use crate::MAPPER;
 
-use super::{ChannelEvent, MASTER_VOLUME, NES_CPU_CLOCK};
+use super::{MASTER_VOLUME, NES_CPU_CLOCK};
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ChannelEvent {
+    LengthCounter(u32),
+}
 
 static FREQUENCY_TABLE: [u16; 16] = [
     0x1AC, 0x17C, 0x154, 0x140, 0x11E, 0x0FE, 0x0E2, 0x0D6, 0x0BE, 0x0A0, 0x08E, 0x080, 0x06A,
