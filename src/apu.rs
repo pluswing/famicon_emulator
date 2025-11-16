@@ -256,6 +256,13 @@ impl NesAPU {
 // Registers
 // ########################################################################
 
+pub const DUTY_TABLE: [[u8; 8]; 4] = [
+    [0, 1, 0, 0, 0, 0, 0, 0],
+    [0, 1, 1, 0, 0, 0, 0, 0],
+    [0, 1, 1, 1, 1, 0, 0, 0],
+    [1, 0, 0, 1, 1, 1, 1, 1],
+];
+
 static LENGTH_COUNTER_TABLE: [u8; 32] = [
     0x0A, 0xFE, 0x14, 0x02, 0x28, 0x04, 0x50, 0x06, 0xA0, 0x08, 0x3C, 0x0A, 0x0E, 0x0C, 0x1A, 0x0E,
     0x0C, 0x10, 0x18, 0x12, 0x30, 0x14, 0x60, 0x16, 0xC0, 0x18, 0x48, 0x1A, 0x10, 0x1C, 0x20, 0x1E,
@@ -346,16 +353,17 @@ impl Ch1Register {
     }
 
     fn next(&mut self) -> f32 {
-        let mut x = 0.0;
-        x = if self.phase <= self.duty() {
-            self.volume()
-        } else {
-            -self.volume()
-        } * MASTER_VOLUME;
-
         if self.mute() {
             return 0.0;
         }
+
+        let duty = self.duty();
+        let step = ((self.phase * 8.0).floor() as usize) % 8;
+        let x = if duty[step] == 0 {
+            -self.volume()
+        } else {
+            self.volume()
+        } * MASTER_VOLUME;
 
         let hz = self.hz();
         if hz != 0.0 {
@@ -364,14 +372,8 @@ impl Ch1Register {
         return x;
     }
 
-    fn duty(&self) -> f32 {
-        match self.duty {
-            0x00 => 0.125,
-            0x01 => 0.25,
-            0x02 => 0.50,
-            0x03 => 0.75,
-            _ => panic!("can't be",),
-        }
+    fn duty(&self) -> &'static [u8; 8] {
+        &DUTY_TABLE[self.duty as usize]
     }
 
     fn tick_envelope(&mut self) {
@@ -546,11 +548,12 @@ impl Ch2Register {
             return 0.0;
         }
 
-        let mut x = 0.0;
-        x = if self.phase <= self.duty() {
-            self.volume()
-        } else {
+        let duty = self.duty();
+        let step = ((self.phase * 8.0).floor() as usize) % 8;
+        let x = if duty[step] == 0 {
             -self.volume()
+        } else {
+            self.volume()
         } * MASTER_VOLUME;
 
         let hz = self.hz();
@@ -560,14 +563,8 @@ impl Ch2Register {
         return x;
     }
 
-    fn duty(&self) -> f32 {
-        match self.duty {
-            0x00 => 0.125,
-            0x01 => 0.25,
-            0x02 => 0.50,
-            0x03 => 0.75,
-            _ => panic!("can't be",),
-        }
+    fn duty(&self) -> &'static [u8; 8] {
+        &DUTY_TABLE[self.duty as usize]
     }
 
     fn tick_envelope(&mut self) {
