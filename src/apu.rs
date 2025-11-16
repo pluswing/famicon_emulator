@@ -809,7 +809,7 @@ impl Ch4Register {
             }
             0x400F => {
                 self.key_off_count = (value & 0xF8) >> 3;
-                self.length_counter = LENGTH_COUNTER_TABLE[self.key_off_count as usize] + 2;
+                self.length_counter = LENGTH_COUNTER_TABLE[self.key_off_count as usize];
 
                 self.phase = 0.0;
                 self.random = 1;
@@ -855,12 +855,9 @@ impl Ch4Register {
     }
 
     pub fn next_random(&mut self) {
-        // 15ビットシフトレジスタにはリセット時に1をセットしておく必要があります。 タイマによってシフトレジスタが励起されるたびに1ビット右シフトし、 ビット14には、ショートモード時にはビット0とビット6のEORを、 ロングモード時にはビット0とビット1のEORを入れます。
-        // ロングモード時にはビット0とビット1のEORを入れます。
-        let bit = if self.kind == NoiseKind::Long { 1 } else { 6 };
-        let b = (self.random & 0x01) ^ ((self.random >> bit) & 0x01);
-        self.random = self.random >> 1;
-        self.random = self.random & 0b011_1111_1111_1111 | b << 14;
+        let bit1 = (self.random >> (if self.kind == NoiseKind::Long { 1 } else { 6 })) & 0x01;
+        let bit2 = self.random & 0x01;
+        self.random = (self.random >> 1) | (bit1 ^ bit2) << 14;
     }
 
     fn tick_length_counter(&mut self) {
