@@ -1,15 +1,13 @@
-use log::{debug, info, trace};
-mod dmc;
-
-use self::dmc::{init_dmc, Ch5Register, DmcEvent, DmcWave};
+use crate::MAPPER;
 use bitflags::bitflags;
-use sdl2::audio::{AudioCallback, AudioDevice, AudioQueue, AudioSpecDesired};
+use log::{debug, info, trace};
+use sdl2::audio::{AudioQueue, AudioSpecDesired};
 use std::ops::Add;
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 const MASTER_VOLUME: f32 = 0.4;
+const SAMPLE_RATE: f32 = 44100.0;
 
 pub struct NesAPU {
     ch1_register: Ch1Register,
@@ -18,7 +16,7 @@ pub struct NesAPU {
     ch4_register: Ch4Register,
     ch5_register: Ch5Register,
 
-    frame_counter: FrameCounter,
+    frame_sequencer: FrameSequencer,
     status: StatusRegister,
     cycles: usize,
     counter: usize,
@@ -32,7 +30,7 @@ const NES_CPU_CLOCK: f32 = 1_789_772.5; // 1.78MHz
 fn init_channel(sdl_context: &sdl2::Sdl) -> AudioQueue<f32> {
     let audio_subsystem = sdl_context.audio().unwrap();
     let desired_spec = AudioSpecDesired {
-        freq: Some(44100),
+        freq: Some(SAMPLE_RATE as i32),
         channels: Some(1),   // mono
         samples: Some(4410), // buffer size
     };
@@ -53,7 +51,7 @@ impl NesAPU {
             ch3_register: Ch3Register::new(),
             ch4_register: Ch4Register::new(),
             ch5_register: Ch5Register::new(),
-            frame_counter: FrameCounter::new(),
+            frame_sequencer: FrameSequencer::new(),
             status: StatusRegister::new(),
             cycles: 0,
             counter: 0,
@@ -113,27 +111,32 @@ impl NesAPU {
                 1
             } << 3);
 
-        // res = res
-        //     | (if self.ch5_register.key_off_count == 0 {
-        //         0
-        //     } else {
-        //         1
-        //     } << 4);
+        res = res | (if self.ch5_register.is_active() { 1 } else { 0 } << 4);
 
         self.status.remove(StatusRegister::ENABLE_FRAME_IRQ);
+        if self.status.contains(StatusRegister::ENABLE_DMC_IRQ) {
+            self.status.remove(StatusRegister::ENABLE_DMC_IRQ);
+            self.ch5_register.clear_irq();
+        }
         res
     }
 
     pub fn write_status(&mut self, data: u8) {
         self.status.update(data);
+        let dmc_enabled = self.status.contains(StatusRegister::ENABLE_5CH);
+        self.ch5_register.set_enabled(dmc_enabled);
+        if !dmc_enabled {
+            self.status.remove(StatusRegister::ENABLE_DMC_IRQ);
+            self.ch5_register.clear_irq();
+        }
     }
 
     pub fn irq(&self) -> bool {
         self.status.contains(StatusRegister::ENABLE_FRAME_IRQ)
     }
 
-    pub fn write_frame_counter(&mut self, value: u8) {
-        self.frame_counter.update(value);
+    pub fn write_frame_sequencer(&mut self, value: u8) {
+        self.frame_sequencer.update(value);
         self.cycles = 0;
         self.counter = 0;
     }
@@ -141,8 +144,8 @@ impl NesAPU {
     pub fn tick(&mut self, cycles: u8) {
         self.cycles += cycles as usize;
 
-        let interval = 7456;
-        if self.cycles >= interval {
+        let interval = 7457;
+        if self.cycles > interval {
             self.cycles -= interval;
             self.counter += 1;
 
@@ -156,7 +159,7 @@ impl NesAPU {
             let duration = self.timer.elapsed().as_nanos();
             self.timer = Instant::now();
 
-            match self.frame_counter.mode() {
+            match self.frame_sequencer.mode() {
                 4 => {
                     // - - - f      60 Hz
                     // - l - l     120 Hz
@@ -169,7 +172,7 @@ impl NesAPU {
                     if self.counter == 4 {
                         // 割り込みフラグセット
                         self.counter = 0;
-                        if self.frame_counter.irq() {
+                        if self.frame_sequencer.irq() {
                             self.status.insert(StatusRegister::ENABLE_FRAME_IRQ);
                         }
                     }
@@ -178,15 +181,15 @@ impl NesAPU {
                 }
                 5 => {
                     // - - - - -   (割り込みフラグはセットしない)
-                    // l - l - -    96 Hz
-                    // e e e e -   192 Hz
+                    // - l - - l   96 Hz
+                    // e e e - e  192 Hz
 
-                    if self.counter == 1 || self.counter == 3 {
+                    if self.counter == 1 || self.counter == 4 {
                         // 長さカウンタとスイープユニットのクロック生成
                         self.send_length_counter_tick();
                         self.send_sweep_tick();
                     }
-                    if self.counter <= 4 {
+                    if self.counter != 3 {
                         // エンベロープと三角波の線形カウンタのクロック生成
                         self.send_envelope_tick();
                     }
@@ -202,8 +205,8 @@ impl NesAPU {
     }
 
     fn add_buffer(&mut self) {
-        let must_add = 44100.0 / 240.0;
-        let buffer_min_size = 44100.0 * (5.0 / 60.0);
+        let must_add = SAMPLE_RATE / 240.0;
+        let buffer_min_size = SAMPLE_RATE * (5.0 / 60.0);
         let buffer_size = self.device.size() as f32 / 4.0; // f32=4byteなので
 
         let add_buffer_size = if buffer_min_size > buffer_size {
@@ -226,6 +229,12 @@ impl NesAPU {
             }
             if self.status.contains(StatusRegister::ENABLE_4CH) {
                 *sample += self.ch4_register.next();
+            }
+            if self.status.contains(StatusRegister::ENABLE_5CH) {
+                *sample += self.ch5_register.next();
+                if self.ch5_register.irq_pending() {
+                    self.status.insert(StatusRegister::ENABLE_DMC_IRQ);
+                }
             }
         }
         self.device.queue_audio(&buffer).unwrap();
@@ -271,6 +280,11 @@ static LENGTH_COUNTER_TABLE: [u8; 32] = [
 static NOISE_TABLE: [u16; 16] = [
     0x004, 0x008, 0x010, 0x020, 0x040, 0x060, 0x080, 0x0A0, 0x0CA, 0x0FE, 0x17C, 0x1FC, 0x2FA,
     0x3F8, 0x7F2, 0xFE4,
+];
+
+static FREQUENCY_TABLE: [u16; 16] = [
+    0x1AC, 0x17C, 0x154, 0x140, 0x11E, 0x0FE, 0x0E2, 0x0D6, 0x0BE, 0x0A0, 0x08E, 0x080, 0x06A,
+    0x054, 0x048, 0x036,
 ];
 
 struct Ch1Register {
@@ -367,7 +381,7 @@ impl Ch1Register {
 
         let hz = self.hz();
         if hz != 0.0 {
-            self.phase = (self.phase + hz / 44100.0) % 1.0;
+            self.phase = (self.phase + hz / SAMPLE_RATE) % 1.0;
         }
         return x;
     }
@@ -558,7 +572,7 @@ impl Ch2Register {
 
         let hz = self.hz();
         if hz != 0.0 {
-            self.phase = (self.phase + hz / 44100.0) % 1.0;
+            self.phase = (self.phase + hz / SAMPLE_RATE) % 1.0;
         }
         return x;
     }
@@ -722,7 +736,7 @@ impl Ch3Register {
         if self.linear_counter == 0 {
             x = 0.0;
         }
-        self.phase = (self.phase + self.hz() / 44100.0) % 1.0;
+        self.phase = (self.phase + self.hz() / SAMPLE_RATE) % 1.0;
         return x;
     }
 
@@ -828,7 +842,7 @@ impl Ch4Register {
         }
 
         let last_phase = self.phase;
-        let mut add = self.hz() / 44100.0;
+        let mut add = self.hz() / SAMPLE_RATE;
         self.phase = (self.phase + add) % 1.0;
 
         loop {
@@ -896,20 +910,184 @@ impl Ch4Register {
     }
 }
 
+struct Ch5Register {
+    // 4010-4013 registers
+    irq_enabled: bool,
+    loop_flag: bool,
+    frequency_index: u8,
+    delta_counter: u8,
+    start_addr: u8,
+    byte_count: u8,
+
+    // runtime state
+    enabled: bool,
+    phase: f32,
+    data: u8,
+    sample_addr: u16,
+    counter: u32,
+    irq_pending: bool,
+}
+
+impl Ch5Register {
+    pub fn new() -> Self {
+        Ch5Register {
+            irq_enabled: false,
+            loop_flag: false,
+            frequency_index: 0,
+            delta_counter: 0,
+            start_addr: 0,
+            byte_count: 0,
+            enabled: false,
+            phase: 0.0,
+            data: 0,
+            sample_addr: 0xC000,
+            counter: Self::counter_from_length(0),
+            irq_pending: false,
+        }
+    }
+
+    pub fn write(&mut self, addr: u16, value: u8) {
+        match addr {
+            0x4010 => {
+                self.irq_enabled = value & 0x80 != 0;
+                self.loop_flag = value & 0x40 != 0;
+                self.frequency_index = value & 0x0F;
+            }
+            0x4011 => {
+                self.delta_counter = value & 0x7F;
+                self.byte_count = 1;
+                self.counter = Self::counter_from_length(1);
+            }
+            0x4012 => {
+                self.start_addr = value;
+                self.sample_addr = value as u16 * 0x40 + 0xC000;
+            }
+            0x4013 => {
+                self.byte_count = value;
+                self.counter = Self::counter_from_length(value);
+            }
+            _ => panic!("can't be"),
+        }
+    }
+
+    fn frequency(&self) -> f32 {
+        NES_CPU_CLOCK / FREQUENCY_TABLE[self.frequency_index as usize] as f32
+    }
+
+    pub fn next(&mut self) -> f32 {
+        if !self.enabled {
+            return 0.0;
+        }
+
+        let last_phase = self.phase;
+        self.phase = (self.phase + self.frequency() / SAMPLE_RATE) % 1.0;
+
+        if last_phase > self.phase {
+            self.clock();
+        }
+
+        if self.delta_counter == 0 || self.counter == 0 {
+            0.0
+        } else {
+            ((self.delta_counter as f32 - 64.0) / 64.0) * MASTER_VOLUME
+        }
+    }
+
+    fn clock(&mut self) {
+        if self.counter == 0 {
+            return;
+        }
+
+        if self.counter & 0x0007 == 0 {
+            self.fetch_sample_byte();
+        }
+
+        self.update_delta();
+        self.counter -= 1;
+
+        if self.counter == 0 {
+            if self.loop_flag {
+                self.set_delta();
+            } else if self.irq_enabled {
+                self.irq_pending = true;
+            }
+        }
+    }
+
+    fn fetch_sample_byte(&mut self) {
+        if self.counter == 0 {
+            return;
+        }
+
+        unsafe {
+            self.data = MAPPER.read_prg_rom(self.sample_addr);
+        }
+        if self.sample_addr == 0xFFFF {
+            self.sample_addr = 0x8000;
+        } else {
+            self.sample_addr = self.sample_addr.wrapping_add(1);
+        }
+    }
+
+    fn update_delta(&mut self) {
+        if self.data & 0x01 == 0x00 {
+            if self.delta_counter > 1 {
+                self.delta_counter -= 2
+            }
+        } else if self.delta_counter < 126 {
+            self.delta_counter += 2
+        }
+        self.data >>= 1;
+    }
+
+    fn set_delta(&mut self) {
+        self.sample_addr = self.start_addr as u16 * 0x40 + 0xC000;
+        self.counter = Self::counter_from_length(self.byte_count);
+        self.data = 0;
+        self.irq_pending = false;
+    }
+
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+        if !enabled {
+            self.counter = 0;
+            self.irq_pending = false;
+        } else if self.counter == 0 && self.byte_count != 0 {
+            self.set_delta();
+        }
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.enabled && self.counter > 0
+    }
+
+    pub fn irq_pending(&self) -> bool {
+        self.irq_pending
+    }
+
+    pub fn clear_irq(&mut self) {
+        self.irq_pending = false;
+    }
+
+    fn counter_from_length(len: u8) -> u32 {
+        (len as u32 * 8) * 0x10 + 1
+    }
+}
+
 bitflags! {
-  pub struct FrameCounter: u8 {
+  pub struct FrameSequencer: u8 {
     const DISABLE_IRQ    = 0b0100_0000;
     const SEQUENCER_MODE = 0b1000_0000;
   }
 }
 
-impl FrameCounter {
+impl FrameSequencer {
     pub fn new() -> Self {
-        FrameCounter::from_bits_truncate(0b1100_0000)
+        FrameSequencer::empty()
     }
 
     pub fn mode(&self) -> u8 {
-        if self.contains(FrameCounter::SEQUENCER_MODE) {
+        if self.contains(FrameSequencer::SEQUENCER_MODE) {
             5
         } else {
             4
@@ -917,7 +1095,7 @@ impl FrameCounter {
     }
 
     pub fn irq(&self) -> bool {
-        !self.contains(FrameCounter::DISABLE_IRQ)
+        !self.contains(FrameSequencer::DISABLE_IRQ)
     }
 
     pub fn update(&mut self, data: u8) {
