@@ -1,7 +1,9 @@
 use log::{debug, info, trace};
 mod dmc;
+mod launchpad;
 
 use self::dmc::{init_dmc, Ch5Register, DmcEvent, DmcWave};
+use self::launchpad::{start_launchpad, SoundEvent};
 use bitflags::bitflags;
 use sdl2::audio::{AudioCallback, AudioDevice, AudioSpecDesired};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -50,11 +52,13 @@ const NES_CPU_CLOCK: f32 = 1_789_772.5; // 1.78MHz
 
 impl NesAPU {
     pub fn new(sdl_context: &sdl2::Sdl) -> Self {
-        let (ch1_device, ch1_sender, ch1_receiver) = init_square(&sdl_context);
-        let (ch2_device, ch2_sender, ch2_receiver) = init_square(&sdl_context);
-        let (ch3_device, ch3_sender, ch3_receiver) = init_triangle(&sdl_context);
-        let (ch4_device, ch4_sender, ch4_receiver) = init_noise(&sdl_context);
+        let (ch1_device, ch1_sender, ch1_receiver, ch1_r) = init_square(&sdl_context, 1);
+        let (ch2_device, ch2_sender, ch2_receiver, ch2_r) = init_square(&sdl_context, 2);
+        let (ch3_device, ch3_sender, ch3_receiver, ch3_r) = init_triangle(&sdl_context);
+        let (ch4_device, ch4_sender, ch4_receiver, ch4_r) = init_noise(&sdl_context);
         let (ch5_device, ch5_sender, ch5_receiver) = init_dmc(&sdl_context);
+
+        start_launchpad(ch1_r, ch2_r, ch3_r, ch4_r);
 
         NesAPU {
             ch1_register: Ch1Register::new(),
@@ -963,7 +967,7 @@ enum SquareEvent {
 
 #[derive(Debug, Clone, PartialEq)]
 struct SquareNote {
-    duty: u8,
+    pub duty: u8,
 }
 
 impl SquareNote {
@@ -987,11 +991,14 @@ struct SquareWave {
     phase: f32,
     receiver: Receiver<SquareEvent>,
     sender: Sender<ChannelEvent>,
+    sender2: Sender<SoundEvent>,
+    channel: u8,
     enabled: bool,
     note: SquareNote,
     envelope: Envelope,
     length_counter: LengthCounter,
     sweep: Sweep,
+    last: SoundEvent,
 }
 
 impl AudioCallback for SquareWave {
@@ -1050,21 +1057,35 @@ impl AudioCallback for SquareWave {
             if hz != 0.0 {
                 self.phase = (self.phase + hz / self.freq) % 1.0;
             }
+            let ev = SoundEvent {
+                channel: self.channel,
+                hz: hz,
+                duty: self.note.duty,
+                volume: self.envelope.volume(),
+                is_long: true,
+            };
+            if self.last != ev {
+                self.sender2.send(ev).unwrap();
+                self.last = ev;
+            }
         }
     }
 }
 
 fn init_square(
     sdl_context: &sdl2::Sdl,
+    no: u8,
 ) -> (
     AudioDevice<SquareWave>,
     Sender<SquareEvent>,
     Receiver<ChannelEvent>,
+    Receiver<SoundEvent>,
 ) {
     let audio_subsystem = sdl_context.audio().unwrap();
 
     let (sender, receiver) = channel::<SquareEvent>();
     let (sender2, receiver2) = channel::<ChannelEvent>();
+    let (sender3, receiver3) = channel::<SoundEvent>();
 
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
@@ -1078,17 +1099,26 @@ fn init_square(
             phase: 0.0,
             receiver: receiver,
             sender: sender2,
+            sender2: sender3,
+            channel: no,
             enabled: true,
             note: SquareNote::new(),
             envelope: Envelope::new(),
             length_counter: LengthCounter::new(),
             sweep: Sweep::new(),
+            last: SoundEvent {
+                channel: 0,
+                hz: 0.0,
+                duty: 0,
+                volume: 0.0,
+                is_long: false,
+            },
         })
         .unwrap();
 
     device.resume();
 
-    (device, sender, receiver2)
+    (device, sender, receiver2, receiver3)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1121,10 +1151,12 @@ struct TriangleWave {
     phase: f32,
     receiver: Receiver<TriangleEvent>,
     sender: Sender<ChannelEvent>,
+    sender2: Sender<SoundEvent>,
     enabled: bool,
     note: TriangleNote,
     length_counter: LengthCounter,
     linear_counter: LinearCounter,
+    last: SoundEvent,
 }
 
 impl AudioCallback for TriangleWave {
@@ -1179,6 +1211,18 @@ impl AudioCallback for TriangleWave {
                 *x = 0.0;
             }
             self.phase = (self.phase + self.note.hz() / self.freq) % 1.0;
+
+            let ev = SoundEvent {
+                channel: 3,
+                hz: self.note.hz(),
+                duty: 0,
+                volume: 1.0,
+                is_long: true,
+            };
+            if self.last != ev {
+                self.sender2.send(ev).unwrap();
+                self.last = ev
+            }
         }
     }
 }
@@ -1189,11 +1233,13 @@ fn init_triangle(
     AudioDevice<TriangleWave>,
     Sender<TriangleEvent>,
     Receiver<ChannelEvent>,
+    Receiver<SoundEvent>,
 ) {
     let audio_subsystem = sdl_context.audio().unwrap();
 
     let (sender, receiver) = channel::<TriangleEvent>();
     let (sender2, receiver2) = channel::<ChannelEvent>();
+    let (sender3, receiver3) = channel::<SoundEvent>();
 
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
@@ -1207,16 +1253,24 @@ fn init_triangle(
             phase: 0.0,
             receiver: receiver,
             sender: sender2,
+            sender2: sender3,
             enabled: true,
             note: TriangleNote::new(),
             length_counter: LengthCounter::new(),
             linear_counter: LinearCounter::new(),
+            last: SoundEvent {
+                channel: 0,
+                hz: 0.0,
+                duty: 0,
+                volume: 0.0,
+                is_long: false,
+            },
         })
         .unwrap();
 
     device.resume();
 
-    (device, sender, receiver2)
+    (device, sender, receiver2, receiver3)
 }
 
 static NOISE_TABLE: [u16; 16] = [
@@ -1236,7 +1290,7 @@ enum NoiseEvent {
 }
 #[derive(Debug, Clone, PartialEq)]
 struct NoiseNote {
-    frequency: u8,
+    pub frequency: u8,
     kind: NoiseKind,
 }
 
@@ -1262,12 +1316,14 @@ struct NoiseWave {
     phase: f32,
     receiver: Receiver<NoiseEvent>,
     sender: Sender<ChannelEvent>,
+    sender2: Sender<SoundEvent>,
     random: NoiseRandom,
     enabled: bool,
     envelope: Envelope,
     note: NoiseNote,
     length_counter: LengthCounter,
     value: bool,
+    last: SoundEvent,
 }
 
 impl AudioCallback for NoiseWave {
@@ -1327,6 +1383,18 @@ impl AudioCallback for NoiseWave {
             if self.phase < last_phase {
                 self.value = self.random.next(self.note.is_long())
             }
+
+            let ev = SoundEvent {
+                channel: 4,
+                hz: self.note.frequency as f32,
+                duty: 0,
+                volume: 1.0,
+                is_long: self.note.is_long(),
+            };
+            if self.last != ev {
+                self.sender2.send(ev).unwrap();
+                self.last = ev
+            }
         }
     }
 }
@@ -1359,11 +1427,13 @@ fn init_noise(
     AudioDevice<NoiseWave>,
     Sender<NoiseEvent>,
     Receiver<ChannelEvent>,
+    Receiver<SoundEvent>,
 ) {
     let audio_subsystem = sdl_context.audio().unwrap();
 
     let (sender, receiver) = channel::<NoiseEvent>();
     let (sender2, receiver2) = channel::<ChannelEvent>();
+    let (sender3, receiver3) = channel::<SoundEvent>();
 
     let desired_spec = AudioSpecDesired {
         freq: Some(44100),
@@ -1377,18 +1447,26 @@ fn init_noise(
             phase: 0.0,
             receiver: receiver,
             sender: sender2,
+            sender2: sender3,
             random: NoiseRandom::new(),
             enabled: true,
             envelope: Envelope::new(),
             note: NoiseNote::new(),
             length_counter: LengthCounter::new(),
             value: false,
+            last: SoundEvent {
+                channel: 0,
+                hz: 0.0,
+                duty: 0,
+                volume: 0.0,
+                is_long: false,
+            },
         })
         .unwrap();
 
     device.resume();
 
-    (device, sender, receiver2)
+    (device, sender, receiver2, receiver3)
 }
 
 bitflags! {
