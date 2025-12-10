@@ -85,27 +85,27 @@ impl NesAPU {
         let mut res = self.status.bits();
         res = res & 0xF0;
         res = res
-            | if self.ch1_register.key_off_count == 0 {
+            | if self.ch1_register.length_counter == 0 {
                 0
             } else {
                 1
             };
         res = res
-            | (if self.ch2_register.key_off_count == 0 {
+            | (if self.ch2_register.length_counter == 0 {
                 0
             } else {
                 1
             } << 1);
 
         res = res
-            | (if self.ch3_register.key_off_count == 0 {
+            | (if self.ch3_register.length_counter == 0 {
                 0
             } else {
                 1
             } << 2);
 
         res = res
-            | (if self.ch4_register.key_off_count == 0 {
+            | (if self.ch4_register.length_counter == 0 {
                 0
             } else {
                 1
@@ -131,7 +131,7 @@ impl NesAPU {
         }
     }
 
-    pub fn irq(&self) -> bool {
+    pub fn frame_irq(&self) -> bool {
         self.status.contains(StatusRegister::ENABLE_FRAME_IRQ)
     }
 
@@ -1118,7 +1118,7 @@ bitflags! {
 
 impl StatusRegister {
     pub fn new() -> Self {
-        StatusRegister::from_bits_truncate(0b0000_0000)
+        StatusRegister::empty()
     }
 
     pub fn update(&mut self, data: u8) {

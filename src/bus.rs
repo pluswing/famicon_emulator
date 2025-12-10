@@ -61,8 +61,8 @@ impl<'a> Bus<'a> {
         res
     }
 
-    pub fn poll_apu_irq(&mut self) -> bool {
-        self.apu.irq()
+    pub fn poll_frame_irq(&mut self) -> bool {
+        self.apu.frame_irq()
     }
 }
 
