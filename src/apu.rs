@@ -358,7 +358,8 @@ impl Ch1Register {
                 self.length_counter = LENGTH_COUNTER_TABLE[self.key_off_count as usize];
 
                 // reset
-                self.envelope_reset();
+                self.envelope_counter = 0x0F;
+                self.envelope_division_period = self.volume + 1;
                 self.sweep_counter = 0;
                 self.phase = 0.0;
             }
@@ -367,11 +368,11 @@ impl Ch1Register {
     }
 
     fn next(&mut self) -> f32 {
-        if self.mute() {
+        if self.length_counter == 0 {
             return 0.0;
         }
 
-        let duty = self.duty();
+        let duty = DUTY_TABLE[self.duty as usize];
         let step = ((self.phase * 8.0).floor() as usize) % 8;
         let x = if duty[step] == 0 {
             -self.volume()
@@ -386,10 +387,6 @@ impl Ch1Register {
         return x;
     }
 
-    fn duty(&self) -> &'static [u8; 8] {
-        &DUTY_TABLE[self.duty as usize]
-    }
-
     fn tick_envelope(&mut self) {
         self.envelope_division_period -= 1;
         if self.envelope_division_period != 0 {
@@ -401,7 +398,8 @@ impl Ch1Register {
             self.envelope_counter -= 1;
         } else if self.envelope_counter == 0 {
             if self.key_off_counter_flag {
-                self.envelope_reset();
+                self.envelope_counter = 0x0F;
+                self.envelope_division_period = self.volume + 1;
             }
         }
         self.envelope_division_period = self.volume + 1;
@@ -416,11 +414,6 @@ impl Ch1Register {
             / 15.0
     }
 
-    fn envelope_reset(&mut self) {
-        self.envelope_counter = 0x0F;
-        self.envelope_division_period = self.volume + 1;
-    }
-
     fn tick_length_counter(&mut self) {
         if !self.key_off_counter_flag {
             return;
@@ -430,13 +423,9 @@ impl Ch1Register {
         }
     }
 
-    fn mute(&self) -> bool {
-        self.length_counter == 0
-    }
-
     fn tick_sweep(&mut self) {
         // チャンネルの長さカウンタがゼロではない
-        if self.mute() {
+        if self.length_counter == 0 {
             return;
         }
         self.sweep_counter += 1;
@@ -445,7 +434,7 @@ impl Ch1Register {
         }
         self.sweep_counter = 0;
 
-        if !self.key_off_counter_flag {
+        if !self.sweep_enabled {
             return;
         }
         if self.sweep_change_amount == 0 {
@@ -471,10 +460,6 @@ impl Ch1Register {
             return 0.0;
         }
         NES_CPU_CLOCK / (16.0 * (self.frequency as f32 + 1.0))
-    }
-
-    fn reset(&mut self) {
-        self.sweep_counter = 0;
     }
 }
 
