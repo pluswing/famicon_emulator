@@ -64,7 +64,7 @@ impl OpCode {
 
 const FLAG_CARRY: u8 = 1 << 0;
 const FLAG_ZERO: u8 = 1 << 1;
-const FLAG_INTERRRUPT: u8 = 1 << 2;
+const FLAG_INTERRUPT: u8 = 1 << 2;
 const FLAG_DECIMAL: u8 = 1 << 3;
 const FLAG_BREAK: u8 = 1 << 4;
 const FLAG_BREAK2: u8 = 1 << 5; // 5 は未使用。
@@ -104,7 +104,7 @@ impl<'a> CPU<'a> {
             register_a: 0,
             register_x: 0,
             register_y: 0,
-            status: FLAG_INTERRRUPT | FLAG_BREAK2, // FIXME あってる？
+            status: FLAG_INTERRUPT | FLAG_BREAK2, // FIXME あってる？
             program_counter: 0,
             stack_pointer: 0xFD, // FIXME あってる？
             // memory: [0x00; 0x10000],
@@ -236,7 +236,7 @@ impl<'a> CPU<'a> {
         self.register_x = 0;
         self.register_y = 0;
         // FIXME あってる？
-        self.status = FLAG_INTERRRUPT | FLAG_BREAK2;
+        self.status = FLAG_INTERRUPT | FLAG_BREAK2;
         self.stack_pointer = 0xFD;
 
         self.program_counter = self.mem_read_u16(0xFFFC);
@@ -259,10 +259,10 @@ impl<'a> CPU<'a> {
                 self.interrupt_nmi();
             }
 
-            if self.bus.poll_apu_irq() {
-                self.apu_irq();
+            if self.bus.poll_frame_irq() {
+                self.interrupt_frame();
             } else if unsafe { MAPPER.is_irq() } {
-                self.apu_irq();
+                self.interrupt_frame();
             }
 
             let opscode = self.mem_read(self.program_counter);
@@ -310,19 +310,25 @@ impl<'a> CPU<'a> {
         status = status | FLAG_BREAK2;
         self._push(status);
 
-        self.status = self.status | FLAG_INTERRRUPT;
+        self.status = self.status | FLAG_INTERRUPT;
         self.bus.tick(2);
         self.program_counter = self.mem_read_u16(0xFFFA);
     }
 
-    fn apu_irq(&mut self) {
-        if self.status & FLAG_INTERRRUPT != 0 {
+    fn interrupt_frame(&mut self) {
+        if self.status & FLAG_INTERRUPT != 0 {
             return;
         }
+
         self._push_u16(self.program_counter);
-        self._push(self.status);
+        let mut status = self.status;
+        status = status & !FLAG_BREAK;
+        status = status | FLAG_BREAK2;
+        self._push(status);
+
+        self.status = self.status | FLAG_INTERRUPT;
+        self.bus.tick(2);
         self.program_counter = self.mem_read_u16(0xFFFE);
-        self.status = self.status | FLAG_BREAK;
     }
 
     pub fn anc(&mut self, mode: &AddressingMode) {
@@ -660,11 +666,11 @@ impl<'a> CPU<'a> {
     }
 
     pub fn sei(&mut self, mode: &AddressingMode) {
-        self.status = self.status | FLAG_INTERRRUPT;
+        self.status = self.status | FLAG_INTERRUPT;
     }
 
     pub fn cli(&mut self, mode: &AddressingMode) {
-        self.status = self.status & !FLAG_INTERRRUPT;
+        self.status = self.status & !FLAG_INTERRUPT;
     }
 
     pub fn sed(&mut self, mode: &AddressingMode) {
@@ -1970,7 +1976,7 @@ mod test {
     #[test]
     fn test_cli() {
         let cpu = run(vec![0x58, 0x00], |cpu| {
-            cpu.status = FLAG_INTERRRUPT | FLAG_NEGATIVE;
+            cpu.status = FLAG_INTERRUPT | FLAG_NEGATIVE;
         });
         assert_status(&cpu, FLAG_NEGATIVE);
     }
@@ -1981,7 +1987,7 @@ mod test {
         let cpu = run(vec![0x78, 0x00], |cpu| {
             cpu.status = FLAG_NEGATIVE;
         });
-        assert_status(&cpu, FLAG_INTERRRUPT | FLAG_NEGATIVE);
+        assert_status(&cpu, FLAG_INTERRUPT | FLAG_NEGATIVE);
     }
 
     // CLV

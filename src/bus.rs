@@ -61,8 +61,8 @@ impl<'a> Bus<'a> {
         res
     }
 
-    pub fn poll_apu_irq(&mut self) -> bool {
-        self.apu.irq()
+    pub fn poll_frame_irq(&mut self) -> bool {
+        self.apu.frame_irq()
     }
 }
 
@@ -181,7 +181,7 @@ impl Mem for Bus<'_> {
                 // 書き込みは、joypadではなく、APUになる。
                 //   APUフレームカウンター
                 //   https://www.nesdev.org/wiki/APU_Frame_Counter
-                self.apu.write_frame_counter(data);
+                self.apu.write_frame_sequencer(data);
             }
             0x4014 => {
                 // $XX を書き込むと、256 バイトのデータが CPU ページ $XX00 ～ $XXFF から内部 PPU OAM にアップロードされます。このページは通常、内部 RAM (通常は $0200 ～ $02FF) にありますが、カートリッジ RAM または ROM も使用できます。
